@@ -3,25 +3,39 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { setupWebSocket } from './ws/index.js';
 import { setupRoutes } from './routes/index.js';
 import { backupManager } from './db/backup.js';
 import { initializePersonaDefaults } from './agent/personaInit.js';
 
-dotenv.config();
+// Get the directory of the current module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load .env from the server directory (parent of src)
+const serverDir = join(__dirname, '..');
+dotenv.config({ path: join(serverDir, '.env') });
+
+// Fix DATABASE_URL to use absolute path if it's relative
+if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('file:./')) {
+  const dbPath = process.env.DATABASE_URL.replace('file:./', '');
+  process.env.DATABASE_URL = `file:${join(serverDir, dbPath)}`;
+}
 
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CLIENT_ORIGIN || 'http://localhost:5000',
+    origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
     methods: ['GET', 'POST'],
     credentials: true
   }
 });
 
 app.use(cors({
-  origin: process.env.CLIENT_ORIGIN || 'http://localhost:5000',
+  origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
   credentials: true
 }));
 app.use(express.json());

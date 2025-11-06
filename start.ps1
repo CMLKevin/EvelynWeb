@@ -4,12 +4,6 @@
 # Enable ANSI colors in PowerShell
 $PSStyle.OutputRendering = [System.Management.Automation.OutputRendering]::Ansi
 
-# Configuration
-$BackendPort = 3001
-$FrontendPort = 5000
-$BackendUrl = "http://localhost:$BackendPort"
-$FrontendUrl = "http://localhost:$FrontendPort"
-
 # Get script directory
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
@@ -22,75 +16,6 @@ Write-Host ""
 Write-Host "╔════════════════════════════════════════╗" -ForegroundColor Blue
 Write-Host "║      Evelyn Chat - Starting...       ║" -ForegroundColor Blue
 Write-Host "╚════════════════════════════════════════╝" -ForegroundColor Blue
-Write-Host ""
-
-# Pre-flight checks
-Write-Host "Running pre-flight checks..." -ForegroundColor Cyan
-
-# Check if Node.js is installed
-try {
-    $nodeVersion = node --version 2>$null
-    Write-Host "✓ Node.js found: $nodeVersion" -ForegroundColor Green
-} catch {
-    Write-Host "✗ Node.js is not installed" -ForegroundColor Red
-    Write-Host "  Please install Node.js 20+ from https://nodejs.org/" -ForegroundColor Yellow
-    exit 1
-}
-
-# Check if npm is installed
-try {
-    $npmVersion = npm --version 2>$null
-    Write-Host "✓ npm found: v$npmVersion" -ForegroundColor Green
-} catch {
-    Write-Host "✗ npm is not installed" -ForegroundColor Red
-    exit 1
-}
-
-# Check if .env file exists
-if (-not (Test-Path "server\.env")) {
-    Write-Host "✗ Missing server\.env file" -ForegroundColor Red
-    Write-Host "  Creating from template..." -ForegroundColor Yellow
-    if (Test-Path "server\.env.example") {
-        Copy-Item "server\.env.example" "server\.env"
-        Write-Host "  ⚠ Please edit server\.env and add your API keys:" -ForegroundColor Yellow
-        Write-Host "     - OPENROUTER_API_KEY" -ForegroundColor Yellow
-        Write-Host "     - PERPLEXITY_API_KEY" -ForegroundColor Yellow
-        Write-Host "  Then run this script again." -ForegroundColor Yellow
-        exit 1
-    } else {
-        Write-Host "✗ server\.env.example not found" -ForegroundColor Red
-        exit 1
-    }
-}
-Write-Host "✓ Environment file found" -ForegroundColor Green
-
-# Check if API keys are set
-$envContent = Get-Content "server\.env" -Raw -ErrorAction SilentlyContinue
-if ($envContent -notmatch "OPENROUTER_API_KEY=sk-" -and $envContent -notmatch "OPENROUTER_API_KEY=your_") {
-    Write-Host "⚠ OPENROUTER_API_KEY might not be set in server\.env" -ForegroundColor Yellow
-}
-
-if ($envContent -notmatch "PERPLEXITY_API_KEY=pplx-" -and $envContent -notmatch "PERPLEXITY_API_KEY=your_") {
-    Write-Host "⚠ PERPLEXITY_API_KEY might not be set in server\.env" -ForegroundColor Yellow
-}
-
-# Check if ports are available
-$backendPortInUse = Get-NetTCPConnection -LocalPort $BackendPort -ErrorAction SilentlyContinue
-if ($backendPortInUse) {
-    Write-Host "✗ Port $BackendPort is already in use" -ForegroundColor Red
-    Write-Host "  Run '.\stop.ps1' to stop any existing servers" -ForegroundColor Yellow
-    exit 1
-}
-Write-Host "✓ Port $BackendPort is available" -ForegroundColor Green
-
-$frontendPortInUse = Get-NetTCPConnection -LocalPort $FrontendPort -ErrorAction SilentlyContinue
-if ($frontendPortInUse) {
-    Write-Host "✗ Port $FrontendPort is already in use" -ForegroundColor Red
-    Write-Host "  Run '.\stop.ps1' to stop any existing servers" -ForegroundColor Yellow
-    exit 1
-}
-Write-Host "✓ Port $FrontendPort is available" -ForegroundColor Green
-
 Write-Host ""
 
 # Cleanup function
@@ -266,86 +191,7 @@ $global:FrontendJob = Start-Job -ScriptBlock {
     npm run dev 2>&1
 }
 
-Write-Host ""
-Write-Host "Waiting for servers to be ready..." -ForegroundColor Cyan
-
-# Wait for backend to be ready
-$backendReady = $false
-for ($i = 0; $i -lt 30; $i++) {
-    try {
-        $response = Invoke-WebRequest -Uri "$BackendUrl/api/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
-        $backendReady = $true
-        break
-    } catch {
-        try {
-            $response = Invoke-WebRequest -Uri "$BackendUrl/api/personality" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
-            $backendReady = $true
-            break
-        } catch {
-            Start-Sleep -Seconds 1
-        }
-    }
-}
-
-if ($backendReady) {
-    Write-Host "✓ Backend is ready" -ForegroundColor Green
-} else {
-    Write-Host "⚠ Backend might still be starting..." -ForegroundColor Yellow
-}
-
-# Wait for frontend to be ready
-$frontendReady = $false
-for ($i = 0; $i -lt 30; $i++) {
-    try {
-        $response = Invoke-WebRequest -Uri $FrontendUrl -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
-        $frontendReady = $true
-        break
-    } catch {
-        Start-Sleep -Seconds 1
-    }
-}
-
-if ($frontendReady) {
-    Write-Host "✓ Frontend is ready" -ForegroundColor Green
-} else {
-    Write-Host "⚠ Frontend might still be starting..." -ForegroundColor Yellow
-}
-
-Write-Host ""
-Write-Host "╔════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║    Servers started successfully!     ║" -ForegroundColor Green
-Write-Host "╚════════════════════════════════════════╝" -ForegroundColor Green
-Write-Host ""
-Write-Host "🌐 Frontend: " -NoNewline -ForegroundColor Cyan
-Write-Host $FrontendUrl -ForegroundColor White
-Write-Host "⚙️  Backend:  " -NoNewline -ForegroundColor Cyan
-Write-Host $BackendUrl -ForegroundColor White
-Write-Host ""
-Write-Host "Press Ctrl+C to stop both servers" -ForegroundColor DarkGray
-
-# Ask if user wants to open browser
-Write-Host ""
-$timeout = 5
-$timer = [Diagnostics.Stopwatch]::StartNew()
-Write-Host "Open browser? [y/N] (auto-skip in ${timeout}s): " -NoNewline -ForegroundColor Cyan
-
-$response = $null
-while ($timer.Elapsed.TotalSeconds -lt $timeout) {
-    if ([Console]::KeyAvailable) {
-        $key = [Console]::ReadKey($true)
-        $response = $key.KeyChar
-        break
-    }
-    Start-Sleep -Milliseconds 100
-}
-$timer.Stop()
-
-Write-Host ""
-if ($response -eq 'y' -or $response -eq 'Y') {
-    Write-Host "Opening browser..." -ForegroundColor Cyan
-    Start-Process $FrontendUrl
-}
-
+Write-Host "Press Ctrl+C to stop the servers" -ForegroundColor Cyan
 Write-Host ""
 
 # Main loop - display logs from both jobs

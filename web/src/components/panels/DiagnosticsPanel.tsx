@@ -44,12 +44,14 @@ export default function DiagnosticsPanel() {
 
   const fetchPersonality = async () => {
     try {
-      const res = await fetch('/api/personality');
+      const res = await fetch('http://localhost:3001/api/personality');
       const data = await res.json();
       const currentPersonality = useStore.getState().personality;
       
       // Track mood changes
       if (currentPersonality && 
+          currentPersonality.mood &&
+          data.mood &&
           (currentPersonality.mood.valence !== data.mood.valence ||
            currentPersonality.mood.arousal !== data.mood.arousal ||
            currentPersonality.mood.stance !== data.mood.stance)) {
@@ -323,7 +325,7 @@ export default function DiagnosticsPanel() {
                 <h3 className="text-sm font-bold text-white">Mood Evolution</h3>
               </div>
 
-              {personality && (
+              {personality && personality.mood ? (
                 <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
                   {/* Current Mood */}
                   <div className="glass-dark rounded-2xl p-4">
@@ -410,6 +412,10 @@ export default function DiagnosticsPanel() {
                       ))}
                     </div>
                   )}
+                </div>
+              ) : (
+                <div className="text-center text-gray-400 py-8">
+                  <p className="text-sm">Loading mood data...</p>
                 </div>
               )}
             </div>

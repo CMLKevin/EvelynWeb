@@ -82,7 +82,7 @@ npm run dev
 
 ### 6. Access the Application
 
-Open your browser to: `http://localhost:5000`
+Open your browser to: `http://localhost:5173`
 
 ## 📁 Project Structure
 

@@ -3,12 +3,12 @@ import { useStore } from '../state/store';
 
 class WSClient {
   private socket: Socket | null = null;
+  private url: string = 'http://localhost:3001';
 
   connect() {
     if (this.socket?.connected) return;
 
-    // Use relative path - Vite proxy will forward to backend
-    this.socket = io({
+    this.socket = io(this.url, {
       transports: ['websocket'],
       reconnection: true
     });

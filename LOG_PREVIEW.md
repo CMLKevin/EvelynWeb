@@ -24,7 +24,7 @@
 ╚════════════════════════════════════════╝
 
 [14:23:19] [FRONTEND] VITE v5.0.8  ready in 423 ms
-[14:23:19] [FRONTEND] ➜  Local:   http://localhost:5000/
+[14:23:19] [FRONTEND] ➜  Local:   http://localhost:5173/
 [14:23:19] [FRONTEND] ➜  Network: use --host to expose
 ```
 

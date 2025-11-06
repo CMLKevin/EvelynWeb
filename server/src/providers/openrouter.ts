@@ -2,12 +2,16 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY!;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_BASE = process.env.OPENROUTER_BASE || 'https://openrouter.ai/api/v1';
 const MODEL_CHAT = process.env.MODEL_CHAT || 'deepseek/deepseek-chat-v3.1';
 const MODEL_THINK_SIMPLE = process.env.MODEL_THINK_SIMPLE || 'x-ai/grok-4-fast';
 const MODEL_THINK_COMPLEX = process.env.MODEL_THINK_COMPLEX || 'minimax/minimax-m2';
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'openai/text-embedding-3-large';
+
+if (!OPENROUTER_API_KEY) {
+  throw new Error('OPENROUTER_API_KEY environment variable is required');
+}
 
 interface Message {
   role: 'system' | 'user' | 'assistant';

@@ -132,6 +132,49 @@ Respond with JSON only:
   "reasoning": "User is sharing personal struggles and seeking validation"
 }`;
 
+/**
+ * Extract JSON from a string response, handling nested braces properly
+ */
+function extractJSON(text: string): string | null {
+  const firstBrace = text.indexOf('{');
+  if (firstBrace === -1) return null;
+  
+  let braceCount = 0;
+  let inString = false;
+  let escapeNext = false;
+  
+  for (let i = firstBrace; i < text.length; i++) {
+    const char = text[i];
+    
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    
+    if (char === '\\') {
+      escapeNext = true;
+      continue;
+    }
+    
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    
+    if (inString) continue;
+    
+    if (char === '{') braceCount++;
+    if (char === '}') {
+      braceCount--;
+      if (braceCount === 0) {
+        return text.substring(firstBrace, i + 1);
+      }
+    }
+  }
+  
+  return null;
+}
+
 const INNER_THOUGHT_PROMPT = `You are Evelyn's inner voice. The user just sent a message, and you need to process it authentically through Evelyn's personality before she responds.
 
 Evelyn's current personality:
@@ -211,15 +254,20 @@ class InnerThoughtEngine {
       
       // Use Gemini Flash for fast, cheap decision
       const response = await openRouterClient.simpleThought(prompt);
-      const jsonMatch = response.match(/\{[\s\S]*?\}/);
+      const jsonText = extractJSON(response);
       
-      if (jsonMatch) {
-        const decision = JSON.parse(jsonMatch[0]) as TriggerDecision;
-        console.log(
-          `[InnerThought] AI Trigger Decision: ${decision.shouldTrigger ? '✓ YES' : '✗ NO'} ` +
-          `(confidence: ${decision.confidence.toFixed(2)}) - ${decision.reasoning}`
-        );
-        return decision.shouldTrigger;
+      if (jsonText) {
+        try {
+          const decision = JSON.parse(jsonText) as TriggerDecision;
+          console.log(
+            `[InnerThought] AI Trigger Decision: ${decision.shouldTrigger ? '✓ YES' : '✗ NO'} ` +
+            `(confidence: ${decision.confidence.toFixed(2)}) - ${decision.reasoning}`
+          );
+          return decision.shouldTrigger;
+        } catch (parseError) {
+          console.error('[InnerThought] Failed to parse trigger decision JSON:', parseError);
+          console.error('[InnerThought] Attempted to parse:', jsonText.slice(0, 200));
+        }
       }
     } catch (error) {
       console.error('[InnerThought] AI trigger decision failed, using fallback:', error);
@@ -310,12 +358,17 @@ class InnerThoughtEngine {
         .replace('{{MESSAGE}}', userMessage);
       
       const response = await openRouterClient.simpleThought(prompt);
-      const jsonMatch = response.match(/\{[\s\S]*?\}/);
+      const jsonText = extractJSON(response);
       
-      if (jsonMatch) {
-        const result = JSON.parse(jsonMatch[0]) as ContextClassification;
-        console.log(`[InnerThought] Context: ${result.context} (${result.confidence.toFixed(2)}) - ${result.reasoning}`);
-        return result;
+      if (jsonText) {
+        try {
+          const result = JSON.parse(jsonText) as ContextClassification;
+          console.log(`[InnerThought] Context: ${result.context} (${result.confidence.toFixed(2)}) - ${result.reasoning}`);
+          return result;
+        } catch (parseError) {
+          console.error('[InnerThought] Failed to parse context classification JSON:', parseError);
+          console.error('[InnerThought] Attempted to parse:', jsonText.slice(0, 200));
+        }
       }
     } catch (error) {
       console.error('[InnerThought] Context classification error:', error);
@@ -493,14 +546,22 @@ class InnerThoughtEngine {
       console.log(`[InnerThought] Generating thought using Flash Lite model (complexity: ${params.complexity})...`);
       
       const response = await openRouterClient.simpleThought(prompt);
+      const jsonText = extractJSON(response);
       
-      const jsonMatch = response.match(/\{[\s\S]*?\}/);
-      
-      if (jsonMatch) {
-        const thought = JSON.parse(jsonMatch[0]) as InnerThought;
-        console.log(`[InnerThought] Generated: "${thought.thought.slice(0, 80)}..."`);
-        console.log(`[InnerThought] Approach: ${thought.responseApproach}, Tone: ${thought.emotionalTone}`);
-        return thought;
+      if (jsonText) {
+        try {
+          const thought = JSON.parse(jsonText) as InnerThought;
+          console.log(`[InnerThought] Generated: "${thought.thought.slice(0, 80)}..."`);
+          console.log(`[InnerThought] Approach: ${thought.responseApproach}, Tone: ${thought.emotionalTone}`);
+          return thought;
+        } catch (parseError) {
+          console.error('[InnerThought] Failed to parse inner thought JSON:', parseError);
+          console.error('[InnerThought] Attempted to parse:', jsonText.slice(0, 500));
+          console.error('[InnerThought] Full response preview:', response.slice(0, 500));
+        }
+      } else {
+        console.error('[InnerThought] No valid JSON found in response');
+        console.error('[InnerThought] Response preview:', response.slice(0, 500));
       }
     } catch (error) {
       console.error('[InnerThought] Thought generation error:', error);

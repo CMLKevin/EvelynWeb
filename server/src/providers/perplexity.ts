@@ -3,10 +3,14 @@ import { openRouterClient } from './openrouter.js';
 
 dotenv.config();
 
-const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY!;
+const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_BASE = process.env.PERPLEXITY_BASE || 'https://api.perplexity.ai';
 const MODEL_SEARCH_SIMPLE = process.env.MODEL_SEARCH_SIMPLE || 'sonar-pro';
 const MODEL_SEARCH_COMPLEX = process.env.MODEL_SEARCH_COMPLEX || 'sonar-reasoning';
+
+if (!PERPLEXITY_API_KEY) {
+  throw new Error('PERPLEXITY_API_KEY environment variable is required');
+}
 
 interface SearchResult {
   query: string;

@@ -288,7 +288,7 @@ export const useStore = create<Store>((set, get) => ({
   loadMessages: async () => {
     try {
       console.log('[Store] Loading historical messages...');
-      const response = await fetch('http://localhost:3001/api/messages?limit=100');
+      const response = await fetch('/api/messages?limit=100');
       if (response.ok) {
         const messages = await response.json();
         console.log(`[Store] Loaded ${messages.length} historical messages`);
@@ -302,7 +302,7 @@ export const useStore = create<Store>((set, get) => ({
   loadActivities: async () => {
     try {
       console.log('[Store] Loading historical activities...');
-      const response = await fetch('http://localhost:3001/api/activities?limit=50');
+      const response = await fetch('/api/activities?limit=50');
       if (response.ok) {
         const activities = await response.json();
         console.log(`[Store] Loaded ${activities.length} activities`);
@@ -316,7 +316,7 @@ export const useStore = create<Store>((set, get) => ({
   loadSearchResults: async () => {
     try {
       console.log('[Store] Loading historical search results...');
-      const response = await fetch('http://localhost:3001/api/search-results?limit=50');
+      const response = await fetch('/api/search-results?limit=50');
       if (response.ok) {
         const searchResults = await response.json();
         console.log(`[Store] Loaded ${searchResults.length} search results`);
@@ -330,7 +330,7 @@ export const useStore = create<Store>((set, get) => ({
   loadPersona: async () => {
     try {
       console.log('[Store] Loading persona snapshot...');
-      const response = await fetch('http://localhost:3001/api/persona');
+      const response = await fetch('/api/persona');
       if (response.ok) {
         const persona = await response.json();
         console.log('[Store] Loaded persona snapshot');
@@ -344,7 +344,7 @@ export const useStore = create<Store>((set, get) => ({
   loadEvolutionEvents: async () => {
     try {
       console.log('[Store] Loading evolution events...');
-      const response = await fetch('http://localhost:3001/api/persona/evolution?limit=50');
+      const response = await fetch('/api/persona/evolution?limit=50');
       if (response.ok) {
         const events = await response.json();
         console.log(`[Store] Loaded ${events.length} evolution events`);

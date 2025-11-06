@@ -26,18 +26,18 @@ class SyncManager {
   }> {
     try {
       // Fetch latest message
-      const messagesRes = await fetch('http://localhost:3001/api/messages?limit=1');
+      const messagesRes = await fetch('/api/messages?limit=1');
       const messages = messagesRes.ok ? await messagesRes.json() : [];
       
       // Fetch latest search result
-      const searchRes = await fetch('http://localhost:3001/api/search-results?limit=1');
+      const searchRes = await fetch('/api/search-results?limit=1');
       const searches = searchRes.ok ? await searchRes.json() : [];
 
       // Get counts
-      const messagesCountRes = await fetch('http://localhost:3001/api/messages?limit=1000');
+      const messagesCountRes = await fetch('/api/messages?limit=1000');
       const allMessages = messagesCountRes.ok ? await messagesCountRes.json() : [];
       
-      const searchCountRes = await fetch('http://localhost:3001/api/search-results?limit=100');
+      const searchCountRes = await fetch('/api/search-results?limit=100');
       const allSearches = searchCountRes.ok ? await searchCountRes.json() : [];
 
       return {
@@ -148,7 +148,7 @@ class SyncManager {
     try {
       // Restore messages
       if (localData.messages && localData.messages.length > 0) {
-        const response = await fetch('http://localhost:3001/api/messages/bulk-restore', {
+        const response = await fetch('/api/messages/bulk-restore', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ messages: localData.messages })
@@ -161,7 +161,7 @@ class SyncManager {
 
       // Restore search results
       if (localData.searchResults && localData.searchResults.length > 0) {
-        const response = await fetch('http://localhost:3001/api/search-results/bulk-restore', {
+        const response = await fetch('/api/search-results/bulk-restore', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ searchResults: localData.searchResults })
@@ -174,7 +174,7 @@ class SyncManager {
 
       // Restore personality
       if (localData.personality) {
-        await fetch('http://localhost:3001/api/personality/restore', {
+        await fetch('/api/personality/restore', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(localData.personality)

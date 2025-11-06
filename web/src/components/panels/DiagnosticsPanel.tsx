@@ -44,7 +44,7 @@ export default function DiagnosticsPanel() {
 
   const fetchPersonality = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/personality');
+      const res = await fetch('/api/personality');
       const data = await res.json();
       const currentPersonality = useStore.getState().personality;
       

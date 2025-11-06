@@ -442,7 +442,7 @@ PERPLEXITY_API_KEY=your_key_here
 
 ### Access Points
 
-- **Frontend**: http://localhost:5000
+- **Frontend**: http://localhost:5173
 - **Backend**: http://localhost:3001
 - **Database Studio**: `npm run db:studio` (in server directory)
 

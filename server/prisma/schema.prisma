@@ -164,6 +164,18 @@ model DatabaseMetadata {
   updatedAt         DateTime @updatedAt
 }
 
+model ServerLifecycle {
+  id                Int      @id @default(autoincrement())
+  eventType         String   // startup | shutdown | crash
+  timestamp         DateTime @default(now())
+  systemTime        DateTime // System clock time for verification
+  uptimeSeconds     Int?     // Uptime before shutdown (if applicable)
+  downtimeSeconds   Int?     // Calculated downtime since last shutdown
+  metadata          String?  // JSON: version, process info, etc.
+  
+  @@index([eventType, timestamp])
+}
+
 model ExtensionData {
   id          Int      @id @default(autoincrement())
   extensionId String   @unique

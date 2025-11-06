@@ -68,6 +68,163 @@ interface TemporalCalculationResult {
   message: string;
 }
 
+interface ServerLifecycleEvent {
+  id: number;
+  eventType: string;
+  timestamp: Date;
+  systemTime: Date;
+  uptimeSeconds: number | null;
+  downtimeSeconds: number | null;
+  metadata: string | null;
+}
+
+interface DowntimeInfo {
+  hadDowntime: boolean;
+  lastShutdown: Date | null;
+  currentStartup: Date;
+  downtimeSeconds: number;
+  downtimeFormatted: string;
+}
+
+// ============================================================================
+// SERVER LIFECYCLE TRACKING
+// ============================================================================
+
+/**
+ * Record a server lifecycle event (startup, shutdown, crash)
+ */
+export async function recordLifecycleEvent(
+  eventType: 'startup' | 'shutdown' | 'crash',
+  uptimeSeconds?: number
+): Promise<ServerLifecycleEvent> {
+  const now = new Date();
+  
+  // Calculate downtime if this is a startup event
+  let downtimeSeconds: number | null = null;
+  if (eventType === 'startup') {
+    const lastShutdown = await db.serverLifecycle.findFirst({
+      where: { eventType: { in: ['shutdown', 'crash'] } },
+      orderBy: { timestamp: 'desc' }
+    });
+    
+    if (lastShutdown) {
+      downtimeSeconds = Math.floor((now.getTime() - new Date(lastShutdown.timestamp).getTime()) / 1000);
+    }
+  }
+  
+  const event = await db.serverLifecycle.create({
+    data: {
+      eventType,
+      timestamp: now,
+      systemTime: now,
+      uptimeSeconds: uptimeSeconds || null,
+      downtimeSeconds,
+      metadata: JSON.stringify({
+        nodeVersion: process.version,
+        platform: process.platform,
+        pid: process.pid
+      })
+    }
+  });
+  
+  return event as ServerLifecycleEvent;
+}
+
+/**
+ * Get downtime information since last shutdown
+ */
+export async function getDowntimeInfo(): Promise<DowntimeInfo> {
+  const now = new Date();
+  
+  const lastShutdown = await db.serverLifecycle.findFirst({
+    where: { eventType: { in: ['shutdown', 'crash'] } },
+    orderBy: { timestamp: 'desc' }
+  });
+  
+  if (!lastShutdown) {
+    return {
+      hadDowntime: false,
+      lastShutdown: null,
+      currentStartup: now,
+      downtimeSeconds: 0,
+      downtimeFormatted: 'N/A (first startup)'
+    };
+  }
+  
+  const downtimeMs = now.getTime() - new Date(lastShutdown.timestamp).getTime();
+  const downtimeSeconds = Math.floor(downtimeMs / 1000);
+  
+  // Format downtime into human-readable string
+  const days = Math.floor(downtimeSeconds / 86400);
+  const hours = Math.floor((downtimeSeconds % 86400) / 3600);
+  const minutes = Math.floor((downtimeSeconds % 3600) / 60);
+  const seconds = downtimeSeconds % 60;
+  
+  let formatted = '';
+  if (days > 0) formatted += `${days}d `;
+  if (hours > 0) formatted += `${hours}h `;
+  if (minutes > 0) formatted += `${minutes}m `;
+  if (seconds > 0 || formatted === '') formatted += `${seconds}s`;
+  
+  return {
+    hadDowntime: true,
+    lastShutdown: lastShutdown.timestamp,
+    currentStartup: now,
+    downtimeSeconds,
+    downtimeFormatted: formatted.trim()
+  };
+}
+
+/**
+ * Get server uptime statistics
+ */
+export async function getUptimeStatistics(): Promise<{
+  totalStartups: number;
+  totalShutdowns: number;
+  averageUptimeSeconds: number;
+  lastStartup: Date | null;
+  lastShutdown: Date | null;
+}> {
+  const startups = await db.serverLifecycle.count({
+    where: { eventType: 'startup' }
+  });
+  
+  const shutdowns = await db.serverLifecycle.count({
+    where: { eventType: { in: ['shutdown', 'crash'] } }
+  });
+  
+  const lastStartup = await db.serverLifecycle.findFirst({
+    where: { eventType: 'startup' },
+    orderBy: { timestamp: 'desc' }
+  });
+  
+  const lastShutdown = await db.serverLifecycle.findFirst({
+    where: { eventType: { in: ['shutdown', 'crash'] } },
+    orderBy: { timestamp: 'desc' }
+  });
+  
+  // Calculate average uptime from shutdown events that have uptimeSeconds
+  const uptimeEvents = await db.serverLifecycle.findMany({
+    where: {
+      eventType: { in: ['shutdown', 'crash'] },
+      uptimeSeconds: { not: null }
+    },
+    select: { uptimeSeconds: true }
+  });
+  
+  const averageUptime = uptimeEvents.length > 0
+    ? uptimeEvents.reduce((sum, e) => sum + (e.uptimeSeconds || 0), 0) / uptimeEvents.length
+    : 0;
+  
+  return {
+    totalStartups: startups,
+    totalShutdowns: shutdowns,
+    averageUptimeSeconds: Math.floor(averageUptime),
+    lastStartup: lastStartup?.timestamp || null,
+    lastShutdown: lastShutdown?.timestamp || null
+  };
+}
+
 // ============================================================================
 // MOOD DECAY CALCULATIONS
 // ============================================================================
@@ -387,6 +544,21 @@ export async function initializeTemporalSystems(): Promise<void> {
   console.log(`[Temporal] Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
   console.log('');
   
+  // Record startup event and get downtime information
+  console.log('[Temporal] Recording startup event...');
+  const downtimeInfo = await getDowntimeInfo();
+  await recordLifecycleEvent('startup');
+  
+  if (downtimeInfo.hadDowntime) {
+    console.log(`  ⏱️  Server was down for: ${downtimeInfo.downtimeFormatted}`);
+    console.log(`  📅 Last shutdown: ${downtimeInfo.lastShutdown?.toISOString()}`);
+    console.log(`  🚀 Current startup: ${downtimeInfo.currentStartup.toISOString()}`);
+    console.log(`  ⚠️  Calculating decay for ${Math.floor(downtimeInfo.downtimeSeconds / 60)} minutes of downtime...`);
+  } else {
+    console.log(`  ℹ️  ${downtimeInfo.downtimeFormatted}`);
+  }
+  console.log('');
+  
   const results: TemporalCalculationResult[] = [];
   
   // 1. Apply mood decay
@@ -457,6 +629,7 @@ export async function getTemporalStatus(): Promise<{
   mood: any;
   beliefs: any;
   memoryRecency: any;
+  lifecycle: any;
 }> {
   const now = new Date();
   
@@ -476,6 +649,10 @@ export async function getTemporalStatus(): Promise<{
   // Get memory status
   const memoryCount = await db.memory.count();
   
+  // Get lifecycle status
+  const downtimeInfo = await getDowntimeInfo();
+  const uptimeStats = await getUptimeStatistics();
+  
   return {
     systemTime: now.toISOString(),
     mood: moodStatus,
@@ -486,19 +663,43 @@ export async function getTemporalStatus(): Promise<{
     memoryRecency: {
       total: memoryCount,
       halfLife: `${TEMPORAL_CONFIG.MEMORY_RECENCY_HALF_LIFE_DAYS} days`
+    },
+    lifecycle: {
+      currentUptime: Math.floor((Date.now() - (uptimeStats.lastStartup?.getTime() || Date.now())) / 1000),
+      lastDowntime: downtimeInfo.downtimeFormatted,
+      lastShutdown: downtimeInfo.lastShutdown?.toISOString() || null,
+      totalStartups: uptimeStats.totalStartups,
+      totalShutdowns: uptimeStats.totalShutdowns,
+      averageUptime: uptimeStats.averageUptimeSeconds
     }
   };
+}
+
+/**
+ * Record server shutdown event
+ * Should be called during graceful shutdown
+ */
+export async function recordShutdown(uptimeSeconds: number): Promise<void> {
+  try {
+    await recordLifecycleEvent('shutdown', uptimeSeconds);
+    console.log(`[Temporal] Shutdown event recorded (uptime: ${Math.floor(uptimeSeconds / 60)} minutes)`);
+  } catch (error) {
+    console.error('[Temporal] Failed to record shutdown event:', error);
+  }
 }
 
 // Export configuration for use by other modules
 export default {
   initialize: initializeTemporalSystems,
+  recordShutdown,
   calculateMoodDecay,
   calculateBeliefDecay,
   calculateMemoryRecency,
   applyMoodDecay,
   calculateAllBeliefDecay,
   analyzeMemoryRecency,
+  getDowntimeInfo,
+  getUptimeStatistics,
   getStatus: getTemporalStatus,
   config: TEMPORAL_CONFIG
 };

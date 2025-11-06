@@ -65,7 +65,11 @@ async function initializeBackupSystem() {
 
 const PORT = process.env.PORT || 3001;
 
+// Track server start time for uptime calculation
+let serverStartTime: number;
+
 httpServer.listen(PORT, async () => {
+  serverStartTime = Date.now();
   console.log(`🚀 Evelyn server running on port ${PORT}`);
   console.log(`📡 WebSocket ready for connections\n`);
   
@@ -80,4 +84,31 @@ httpServer.listen(PORT, async () => {
   
   console.log('✨ All systems initialized\n');
 });
+
+// Graceful shutdown handlers
+async function gracefulShutdown(signal: string) {
+  console.log(`\n[Server] Received ${signal} signal, shutting down gracefully...`);
+  
+  // Calculate uptime
+  const uptimeSeconds = Math.floor((Date.now() - serverStartTime) / 1000);
+  
+  // Record shutdown event in temporal engine
+  await temporalEngine.recordShutdown(uptimeSeconds);
+  
+  // Close HTTP server
+  httpServer.close(() => {
+    console.log('[Server] HTTP server closed');
+    process.exit(0);
+  });
+  
+  // Force shutdown after 10 seconds
+  setTimeout(() => {
+    console.error('[Server] Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000);
+}
+
+// Handle shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 

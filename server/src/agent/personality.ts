@@ -141,6 +141,7 @@ BELIEF FORMATION GUIDELINES:
 • Initial confidence: 0.65-0.80 for well-supported beliefs
 • Update existing beliefs when evidence confirms/challenges them (±0.1 to ±0.3)
 • Focus on beliefs that will help Evelyn respond more effectively
+• NOTE: Belief confidence naturally decays with a 14-day half-life. Reinforce important beliefs periodically through updates to maintain their strength
 
 GOAL CREATION GUIDELINES:
 • Propose NEW goals when conversation reveals areas for growth or user needs
@@ -1346,9 +1347,33 @@ Respond with JSON only:
       orderBy: { confidence: 'desc' }
     });
 
+    // Load ALL goals (no limit)
     const goals = await db.personaGoal.findMany({
-      take: 5,
       orderBy: [{ priority: 'asc' }, { progress: 'desc' }]
+    });
+
+    // Apply 14-day half-life decay to belief confidence
+    const now = new Date();
+    const HALF_LIFE_DAYS = 14;
+
+    const beliefsWithDecay = beliefs.map((b: any) => {
+      // Calculate days since last update
+      const daysSinceUpdate = (now.getTime() - new Date(b.lastUpdateAt).getTime()) / (24 * 60 * 60 * 1000);
+      
+      // Apply exponential decay: confidence * 0.5^(days / halfLife)
+      const decayedConfidence = b.confidence * Math.pow(0.5, daysSinceUpdate / HALF_LIFE_DAYS);
+      
+      // Log significant decay (>10% loss)
+      if (b.confidence - decayedConfidence > 0.1) {
+        console.log(`[Personality] Belief decay: "${b.statement.substring(0, 50)}..." ${(b.confidence * 100).toFixed(0)}% → ${(decayedConfidence * 100).toFixed(0)}% (${daysSinceUpdate.toFixed(1)} days)`);
+      }
+      
+      return {
+        ...b,
+        confidence: decayedConfidence,
+        originalConfidence: b.confidence, // Keep original for reference
+        evidenceIds: JSON.parse(b.evidenceIds)
+      };
     });
 
     return {
@@ -1358,10 +1383,7 @@ Respond with JSON only:
         ...relationship,
         boundaries: relationship.boundaries ? JSON.parse(relationship.boundaries as any) : null
       },
-      beliefs: beliefs.map((b: any) => ({
-        ...b,
-        evidenceIds: JSON.parse(b.evidenceIds)
-      })),
+      beliefs: beliefsWithDecay,
       goals: goals.map((g: any) => ({
         ...g,
         evidenceIds: JSON.parse(g.evidenceIds)

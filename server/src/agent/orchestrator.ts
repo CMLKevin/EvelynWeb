@@ -477,17 +477,16 @@ class Orchestrator {
       // Relationship context (affects tone and openness)
       const relationshipText = `Stage: ${rel.stage} | Closeness: ${(rel.closeness * 100).toFixed(0)}% | Trust: ${(rel.trust * 100).toFixed(0)}% | Flirtation: ${(rel.flirtation * 100).toFixed(0)}%`;
       
-      // All active beliefs (sorted by confidence)
+      // All active beliefs (sorted by confidence, with decay applied)
       const beliefsText = fullSnapshot.beliefs.length > 0
         ? fullSnapshot.beliefs
             .map((b: any) => `[${b.subject}] ${b.statement} (${(b.confidence * 100).toFixed(0)}% confident)`)
             .join('\n')
         : '';
 
-      // Current goals (top 5)
+      // ALL current goals (no limit)
       const goalsText = fullSnapshot.goals.length > 0
         ? fullSnapshot.goals
-            .slice(0, 5)
             .map((g: any) => `${g.title}: ${g.description} (${(g.progress * 100).toFixed(0)}% progress)`)
             .join('\n')
         : '';

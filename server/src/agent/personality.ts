@@ -1,5 +1,6 @@
 import { db } from '../db/client.js';
 import { openRouterClient } from '../providers/openrouter.js';
+import temporalEngine from '../core/temporalEngine.js';
 
 const INITIAL_ANCHORS = [
   { trait: 'Social Fluidity', value: 0.78, description: 'Instantly reads context and adapts—technical to emotional to flirty without whiplash. Meets people where they are.' },
@@ -683,32 +684,26 @@ class PersonalityEngine {
   }
 
   private async applyMoodDecay(mood: Mood): Promise<Mood> {
-    const now = Date.now();
-    const lastUpdate = new Date(mood.lastUpdateAt).getTime();
-    const elapsedMins = (now - lastUpdate) / (1000 * 60);
+    // Use centralized temporal engine for mood decay calculations
+    const now = new Date();
+    const decayResult = temporalEngine.calculateMoodDecay(mood, now);
 
-    if (elapsedMins < 5) return mood;
-
-    // Exponential decay toward baseline
-    const halfLife = mood.decayHalfLifeMins;
-    const decayFactor = Math.pow(0.5, elapsedMins / halfLife);
-
-    const baselineValence = 0.2;
-    const baselineArousal = 0.4;
-
-    const newValence = baselineValence + (mood.valence - baselineValence) * decayFactor;
-    const newArousal = baselineArousal + (mood.arousal - baselineArousal) * decayFactor;
-
-    if (Math.abs(mood.valence - newValence) > 0.05 || Math.abs(mood.arousal - newArousal) > 0.05) {
-      const updated = await db.moodState.update({
-        where: { id: mood.id },
-        data: {
-          valence: newValence,
-          arousal: newArousal,
-          lastUpdateAt: new Date()
-        }
-      });
-      return updated;
+    // If decay was applied and change is significant, update database
+    if (decayResult.decayApplied) {
+      const valenceChange = Math.abs(mood.valence - decayResult.valence);
+      const arousalChange = Math.abs(mood.arousal - decayResult.arousal);
+      
+      if (valenceChange > 0.05 || arousalChange > 0.05) {
+        const updated = await db.moodState.update({
+          where: { id: mood.id },
+          data: {
+            valence: decayResult.valence,
+            arousal: decayResult.arousal,
+            lastUpdateAt: now
+          }
+        });
+        return updated;
+      }
     }
 
     return mood;
@@ -1352,25 +1347,21 @@ Respond with JSON only:
       orderBy: [{ priority: 'asc' }, { progress: 'desc' }]
     });
 
-    // Apply 14-day half-life decay to belief confidence
+    // Apply 14-day half-life decay to belief confidence (using centralized temporal engine)
     const now = new Date();
-    const HALF_LIFE_DAYS = 14;
 
     const beliefsWithDecay = beliefs.map((b: any) => {
-      // Calculate days since last update
-      const daysSinceUpdate = (now.getTime() - new Date(b.lastUpdateAt).getTime()) / (24 * 60 * 60 * 1000);
-      
-      // Apply exponential decay: confidence * 0.5^(days / halfLife)
-      const decayedConfidence = b.confidence * Math.pow(0.5, daysSinceUpdate / HALF_LIFE_DAYS);
+      // Use temporal engine for consistent decay calculation
+      const decayResult = temporalEngine.calculateBeliefDecay(b.confidence, b.lastUpdateAt, now);
       
       // Log significant decay (>10% loss)
-      if (b.confidence - decayedConfidence > 0.1) {
-        console.log(`[Personality] Belief decay: "${b.statement.substring(0, 50)}..." ${(b.confidence * 100).toFixed(0)}% → ${(decayedConfidence * 100).toFixed(0)}% (${daysSinceUpdate.toFixed(1)} days)`);
+      if (b.confidence - decayResult.confidence > 0.1) {
+        console.log(`[Personality] Belief decay: "${b.statement.substring(0, 50)}..." ${(b.confidence * 100).toFixed(0)}% → ${(decayResult.confidence * 100).toFixed(0)}% (${decayResult.daysSinceUpdate.toFixed(1)} days)`);
       }
       
       return {
         ...b,
-        confidence: decayedConfidence,
+        confidence: decayResult.confidence,
         originalConfidence: b.confidence, // Keep original for reference
         evidenceIds: JSON.parse(b.evidenceIds)
       };

@@ -2,6 +2,7 @@ import { db } from '../db/client.js';
 import { embed } from '../providers/embeddings.js';
 import { openRouterClient } from '../providers/openrouter.js';
 import { cosineSimilarity } from '../utils/similarity.js';
+import temporalEngine from '../core/temporalEngine.js';
 
 interface Memory {
   id: number;
@@ -107,10 +108,9 @@ class MemoryEngine {
           const embedding = JSON.parse(m.embedding) as number[];
           const similarity = cosineSimilarity(queryEmbedding, embedding);
           
-          // Recency boost (decay over 30 days)
-          const ageMs = Date.now() - new Date(m.lastAccessedAt).getTime();
-          const ageDays = ageMs / (1000 * 60 * 60 * 24);
-          const recencyBoost = Math.exp(-ageDays / 30) * 0.2;
+          // Recency boost (decay over 30 days) - using centralized temporal engine
+          const recencyResult = temporalEngine.calculateMemoryRecency(m.lastAccessedAt);
+          const recencyBoost = recencyResult.recencyBoost;
 
           const score = similarity * (0.6 + 0.4 * m.importance) + recencyBoost;
 

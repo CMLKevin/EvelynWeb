@@ -3,6 +3,7 @@ import { Server } from 'socket.io';
 import { db } from '../db/client.js';
 import { setupRestoreRoutes } from './restore.js';
 import { setupBackupRoutes } from './backup.js';
+import temporalEngine from '../core/temporalEngine.js';
 
 export function setupRoutes(app: Express, io: Server) {
   
@@ -15,6 +16,17 @@ export function setupRoutes(app: Express, io: Server) {
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // Temporal engine status
+  app.get('/api/temporal/status', async (req, res) => {
+    try {
+      const status = await temporalEngine.getStatus();
+      res.json(status);
+    } catch (error) {
+      console.error('Error getting temporal status:', error);
+      res.status(500).json({ error: 'Failed to get temporal status' });
+    }
   });
 
   // Get messages

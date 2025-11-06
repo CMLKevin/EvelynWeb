@@ -9,6 +9,7 @@ import { setupWebSocket } from './ws/index.js';
 import { setupRoutes } from './routes/index.js';
 import { backupManager } from './db/backup.js';
 import { initializePersonaDefaults } from './agent/personaInit.js';
+import temporalEngine from './core/temporalEngine.js';
 
 // Get the directory of the current module
 const __filename = fileURLToPath(import.meta.url);
@@ -66,12 +67,17 @@ const PORT = process.env.PORT || 3001;
 
 httpServer.listen(PORT, async () => {
   console.log(`🚀 Evelyn server running on port ${PORT}`);
-  console.log(`📡 WebSocket ready for connections`);
+  console.log(`📡 WebSocket ready for connections\n`);
+  
+  // Initialize temporal engine (system clock-based calculations)
+  await temporalEngine.initialize();
   
   // Initialize backup system after server starts
   await initializeBackupSystem();
   
   // Initialize persona defaults
   await initializePersonaDefaults();
+  
+  console.log('✨ All systems initialized\n');
 });
 

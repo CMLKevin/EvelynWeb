@@ -1,0 +1,235 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          Int      @id @default(autoincrement())
+  displayName String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Message {
+  id         Int      @id @default(autoincrement())
+  role       String   // user | assistant | system
+  content    String
+  tokensIn   Int      @default(0)
+  tokensOut  Int      @default(0)
+  createdAt  DateTime @default(now())
+  chapterId  Int?
+  auxiliary  String?  // JSON: { toolCalls, searchUsed, retrievalIds, moodSnapshot }
+  
+  chapter    Chapter? @relation(fields: [chapterId], references: [id])
+  memories   Memory[]
+  
+  @@index([createdAt])
+}
+
+model Chapter {
+  id              Int      @id @default(autoincrement())
+  title           String
+  summary         String
+  startMessageId  Int?
+  endMessageId    Int?
+  createdAt       DateTime @default(now())
+  features        String?  // JSON: { topicVector, keywords, participants }
+  
+  messages        Message[]
+}
+
+model Memory {
+  id               Int      @id @default(autoincrement())
+  type             String   // episodic | semantic | preference | insight | plan | relational
+  text             String
+  importance       Float
+  embedding        String   // JSON float[]
+  privacy          String   // public | private | ephemeral
+  lastAccessedAt   DateTime @default(now())
+  sourceMessageId  Int?
+  createdAt        DateTime @default(now())
+  
+  sourceMessage    Message?       @relation(fields: [sourceMessageId], references: [id])
+  linksFrom        MemoryLink[]   @relation("FromMemory")
+  linksTo          MemoryLink[]   @relation("ToMemory")
+  
+  @@index([importance])
+  @@index([lastAccessedAt])
+}
+
+model MemoryLink {
+  id       Int    @id @default(autoincrement())
+  fromId   Int
+  toId     Int
+  relation String
+  weight   Float
+  
+  from     Memory @relation("FromMemory", fields: [fromId], references: [id], onDelete: Cascade)
+  to       Memory @relation("ToMemory", fields: [toId], references: [id], onDelete: Cascade)
+  
+  @@unique([fromId, toId, relation])
+}
+
+model PersonalityAnchor {
+  id           Int      @id @default(autoincrement())
+  trait        String   @unique
+  value        Float
+  evidenceIds  String   // JSON Int[]
+  lastUpdateAt DateTime @default(now())
+  description  String
+}
+
+model MoodState {
+  id               Int      @id @default(autoincrement())
+  valence          Float    // -1 to 1
+  arousal          Float    // 0 to 1
+  stance           String
+  decayHalfLifeMins Int     @default(30)
+  lastUpdateAt     DateTime @default(now())
+}
+
+model Settings {
+  id                          Int       @id @default(autoincrement())
+  thoughtVerbosity            String    @default("medium") // low | medium | high
+  memoryPrivacyDefault        String    @default("public") // public | private | ephemeral
+  dreamSchedule               String?   // cron or null
+  enableDiagnostics           Boolean   @default(true)
+  searchPreference            String    @default("auto")   // auto | never | ask
+  conversationsSinceReflection Int      @default(0)        // Persisted counter for micro-reflection
+  lastReflectionAt            DateTime? // Timestamp of last deep reflection
+  customSettings              String?   // JSON: Flexible field for future settings
+  version                     Int       @default(1)
+  updatedAt                   DateTime  @updatedAt
+}
+
+model ToolActivity {
+  id              Int       @id @default(autoincrement())
+  tool            String    // recall | search | summarize | evolve | embed | dream | classify | think
+  status          String    // queued | running | done | error | cancelled
+  inputSummary    String
+  outputSummary   String?
+  error           String?
+  metadata        String?   // JSON: Flexible field for tool-specific data
+  createdAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  linkedMessageId Int?
+  
+  @@index([createdAt])
+  @@index([tool, status])
+}
+
+model SearchResult {
+  id            Int      @id @default(autoincrement())
+  query         String
+  originalQuery String?
+  answer        String
+  citations     String   // JSON string[]
+  synthesis     String
+  summary       String?  // AI-generated ~500 word summary for context inclusion
+  model         String
+  metadata      String?  // JSON: Flexible field for search-specific data
+  createdAt     DateTime @default(now())
+  
+  @@index([createdAt])
+  @@index([model])
+}
+
+model Job {
+  id        Int       @id @default(autoincrement())
+  type      String    // dream | reindex | cleanup | backup
+  status    String    // queued | running | done | error
+  payload   String?   // JSON
+  result    String?   // JSON: Job execution result
+  nextRunAt DateTime?
+  createdAt DateTime  @default(now())
+  
+  @@index([type, status])
+  @@index([nextRunAt])
+}
+
+model DatabaseMetadata {
+  id                Int      @id @default(autoincrement())
+  schemaVersion     Int      @default(1)
+  appVersion        String   @default("1.0.0")
+  lastMigration     DateTime @default(now())
+  lastBackup        DateTime?
+  totalMessages     Int      @default(0)
+  totalMemories     Int      @default(0)
+  customMetadata    String?  // JSON: Flexible field for future metadata
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model ExtensionData {
+  id          Int      @id @default(autoincrement())
+  extensionId String   @unique
+  dataType    String   // Type identifier for the extension
+  data        String   // JSON: Flexible storage for any future extension
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([extensionId])
+  @@index([dataType])
+}
+
+model RelationshipState {
+  id           Int      @id @default(autoincrement())
+  userId       Int?     // null for single-user mode
+  closeness    Float    @default(0.2)
+  trust        Float    @default(0.2)
+  flirtation   Float    @default(0.2)
+  boundaries   String?  // JSON: { topics: string[], notes: string }
+  stage        String   @default("acquaintance")
+  lastUpdateAt DateTime @default(now())
+}
+
+model PersonaBelief {
+  id           Int      @id @default(autoincrement())
+  subject      String   // self | user | world
+  statement    String
+  confidence   Float    // 0..1
+  evidenceIds  String   // JSON Int[] (Memory IDs)
+  lastUpdateAt DateTime @default(now())
+}
+
+model PersonaGoal {
+  id           Int      @id @default(autoincrement())
+  title        String
+  description  String
+  category     String   // learning | relationship | habit | craft
+  priority     Int      @default(3)
+  progress     Float    @default(0.0)
+  evidenceIds  String   // JSON Int[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model PersonaEvolutionEvent {
+  id           Int      @id @default(autoincrement())
+  type         String   // anchor | mood | belief | goal | relationship
+  target       String   // e.g., trait name, belief id, goal id, metric
+  delta        Float?
+  rationale    String
+  evidenceIds  String   // JSON Int[]
+  metadata     String?  // JSON: { before, after, prompt }
+  createdAt    DateTime @default(now())
+  
+  @@index([createdAt])
+  @@index([type])
+}
+
+model MoodHistory {
+  id           Int      @id @default(autoincrement())
+  valence      Float
+  arousal      Float
+  stance       String
+  createdAt    DateTime @default(now())
+  
+  @@index([createdAt])
+}
+

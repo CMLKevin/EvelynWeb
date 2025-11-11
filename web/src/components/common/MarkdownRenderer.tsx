@@ -1,16 +1,49 @@
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+// Use Light version of SyntaxHighlighter to reduce bundle size
+import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+
+// Import only commonly used languages to reduce bundle size
+import javascript from 'react-syntax-highlighter/dist/esm/languages/hljs/javascript';
+import typescript from 'react-syntax-highlighter/dist/esm/languages/hljs/typescript';
+import python from 'react-syntax-highlighter/dist/esm/languages/hljs/python';
+import bash from 'react-syntax-highlighter/dist/esm/languages/hljs/bash';
+import json from 'react-syntax-highlighter/dist/esm/languages/hljs/json';
+import css from 'react-syntax-highlighter/dist/esm/languages/hljs/css';
+import xml from 'react-syntax-highlighter/dist/esm/languages/hljs/xml'; // For HTML
+import sql from 'react-syntax-highlighter/dist/esm/languages/hljs/sql';
+import markdown from 'react-syntax-highlighter/dist/esm/languages/hljs/markdown';
+
+// Register languages
+SyntaxHighlighter.registerLanguage('javascript', javascript);
+SyntaxHighlighter.registerLanguage('js', javascript);
+SyntaxHighlighter.registerLanguage('typescript', typescript);
+SyntaxHighlighter.registerLanguage('ts', typescript);
+SyntaxHighlighter.registerLanguage('tsx', typescript);
+SyntaxHighlighter.registerLanguage('jsx', javascript);
+SyntaxHighlighter.registerLanguage('python', python);
+SyntaxHighlighter.registerLanguage('py', python);
+SyntaxHighlighter.registerLanguage('bash', bash);
+SyntaxHighlighter.registerLanguage('sh', bash);
+SyntaxHighlighter.registerLanguage('shell', bash);
+SyntaxHighlighter.registerLanguage('json', json);
+SyntaxHighlighter.registerLanguage('css', css);
+SyntaxHighlighter.registerLanguage('html', xml);
+SyntaxHighlighter.registerLanguage('xml', xml);
+SyntaxHighlighter.registerLanguage('sql', sql);
+SyntaxHighlighter.registerLanguage('markdown', markdown);
+SyntaxHighlighter.registerLanguage('md', markdown);
 
 interface MarkdownRendererProps {
   content: string;
   className?: string;
 }
 
-export default function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
+const MarkdownRenderer = memo(function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
   return (
     <div className={`markdown-content overflow-hidden break-words ${className}`} style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
       <ReactMarkdown
@@ -30,7 +63,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
                 {language}
               </div>
               <SyntaxHighlighter
-                style={oneDark}
+                style={atomOneDark}
                 language={language}
                 PreTag="div"
                 customStyle={{
@@ -163,7 +196,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
         
         // Emphasis/Italic
         em: ({ children }) => (
-          <em className="italic text-gray-300">
+          <em className="italic text-gray-400">
             {children}
           </em>
         ),
@@ -190,5 +223,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
       </ReactMarkdown>
     </div>
   );
-}
+});
+
+export default MarkdownRenderer;
 

@@ -40,17 +40,35 @@ class EmbeddingCache {
 const embeddingCache = new EmbeddingCache();
 
 export async function embed(text: string): Promise<number[]> {
-  const cached = embeddingCache.get(text);
+  // Validate input
+  if (!text || text.trim().length === 0) {
+    throw new Error('Cannot embed empty text');
+  }
+  
+  // Truncate very long texts (OpenRouter has limits)
+  const maxLength = 8000; // Conservative limit for embedding models
+  const truncatedText = text.length > maxLength ? text.slice(0, maxLength) : text;
+  
+  if (text.length > maxLength) {
+    console.warn(`[Embeddings] Text truncated from ${text.length} to ${maxLength} chars`);
+  }
+  
+  const cached = embeddingCache.get(truncatedText);
   if (cached) {
     console.log('[Embeddings] Cache hit');
     return cached;
   }
 
-  console.log(`[Embeddings] Generating embedding for text (${text.length} chars)...`);
+  console.log(`[Embeddings] Generating embedding for text (${truncatedText.length} chars)...`);
   try {
-    const embedding = await openRouterClient.embed(text);
+    const embedding = await openRouterClient.embed(truncatedText);
+    
+    if (!Array.isArray(embedding) || embedding.length === 0) {
+      throw new Error('Invalid embedding response: empty or not an array');
+    }
+    
     console.log(`[Embeddings] Embedding generated, dimension: ${embedding.length}`);
-    embeddingCache.set(text, embedding);
+    embeddingCache.set(truncatedText, embedding);
     return embedding;
   } catch (error) {
     console.error('[Embeddings] Error generating embedding:', error);
@@ -59,11 +77,22 @@ export async function embed(text: string): Promise<number[]> {
 }
 
 export async function embedBatch(texts: string[]): Promise<number[][]> {
+  if (!Array.isArray(texts) || texts.length === 0) {
+    console.warn('[Embeddings] Empty or invalid texts array for batch embedding');
+    return [];
+  }
+  
   const results: number[][] = [];
   const toEmbed: string[] = [];
   const indices: number[] = [];
 
   texts.forEach((text, idx) => {
+    // Skip empty texts
+    if (!text || text.trim().length === 0) {
+      console.warn(`[Embeddings] Skipping empty text at index ${idx}`);
+      return;
+    }
+    
     const cached = embeddingCache.get(text);
     if (cached) {
       results[idx] = cached;
@@ -74,12 +103,22 @@ export async function embedBatch(texts: string[]): Promise<number[][]> {
   });
 
   if (toEmbed.length > 0) {
+    try {
     const embeddings = await openRouterClient.embedBatch(toEmbed);
+      
+      if (!Array.isArray(embeddings) || embeddings.length !== toEmbed.length) {
+        throw new Error(`Expected ${toEmbed.length} embeddings, got ${embeddings?.length || 0}`);
+      }
+      
     embeddings.forEach((emb, i) => {
       const idx = indices[i];
       results[idx] = emb;
       embeddingCache.set(toEmbed[i], emb);
     });
+    } catch (error) {
+      console.error('[Embeddings] Batch embedding error:', error);
+      throw error;
+    }
   }
 
   return results;

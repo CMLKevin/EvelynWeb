@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Database, Trash2, CheckSquare, Square } from 'lucide-react';
 
 interface Memory {
   id: number;
@@ -107,33 +108,33 @@ export default function MemoryTimeline() {
     }
   };
 
-  const getTypeColor = (type: string) => {
+  const getTypeBadgeColor = (type: string) => {
     switch (type) {
-      case 'episodic': return 'from-blue-500 to-cyan-500';
-      case 'semantic': return 'from-green-500 to-emerald-500';
-      case 'preference': return 'from-purple-500 to-violet-500';
-      case 'insight': return 'from-yellow-500 to-amber-500';
-      case 'plan': return 'from-red-500 to-orange-500';
-      case 'relational': return 'from-pink-500 to-rose-500';
-      default: return 'from-gray-500 to-gray-600';
+      case 'episodic': return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
+      case 'semantic': return 'bg-green-500/20 text-green-400 border-green-500/30';
+      case 'preference': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+      case 'insight': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      case 'plan': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+      case 'relational': return 'bg-pink-500/20 text-pink-400 border-pink-500/30';
+      default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
     }
   };
 
   const types = ['all', 'episodic', 'semantic', 'preference', 'insight', 'plan', 'relational'];
 
   return (
-    <div className="space-y-3 max-h-[calc(100vh-300px)] overflow-y-auto pr-2">
+    <div className="space-y-3">
       {/* Filter pills - Sticky at top */}
-      <div className="glass-strong rounded-3xl p-3 shadow-float sticky top-0 z-10 backdrop-blur-xl">
+      <div className="bg-black/40 border border-cyan-500/30 rounded p-3 sticky top-0 z-10 backdrop-blur-xl">
         <div className="flex flex-wrap gap-2 mb-3">
           {types.map((type) => (
             <button
               key={type}
               onClick={() => setFilter(type)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+              className={`terminal-button px-3 py-1.5 text-xs font-semibold monospace uppercase transition-all ${
                 filter === type
-                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg scale-105'
-                  : 'glass text-gray-400 hover:text-white hover:scale-105'
+                  ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500'
+                  : 'text-gray-400 hover:text-cyan-400 hover:bg-cyan-500/10'
               }`}
             >
               {type}
@@ -143,25 +144,36 @@ export default function MemoryTimeline() {
 
         {/* Bulk actions */}
         {memories.length > 0 && (
-          <div className="flex items-center gap-2 pt-2 border-t border-white/10">
+          <div className="flex items-center gap-2 pt-2 border-t border-cyan-500/20">
             <button
               onClick={selectAll}
-              className="glass hover:glass-strong px-3 py-1.5 rounded-lg text-xs transition-all hover:scale-105"
+              className="terminal-button px-3 py-1.5 text-xs monospace"
             >
-              {selectedIds.size === memories.length ? '✓ Deselect All' : 'Select All'}
+              {selectedIds.size === memories.length ? (
+                <>
+                  <CheckSquare className="w-4 h-4" />
+                  <span>DESELECT ALL</span>
+                </>
+              ) : (
+                <>
+                  <Square className="w-4 h-4" />
+                  <span>SELECT ALL</span>
+                </>
+              )}
             </button>
             
             {selectedIds.size > 0 && (
               <>
-                <div className="text-xs text-gray-400">
-                  {selectedIds.size} selected
+                <div className="text-xs text-gray-400 monospace">
+                  {selectedIds.size} SELECTED
                 </div>
                 <button
                   onClick={bulkDelete}
                   disabled={isDeleting}
-                  className="glass-dark hover:bg-red-500/20 px-3 py-1.5 rounded-lg text-xs text-red-400 transition-all hover:scale-105 disabled:opacity-50"
+                  className="terminal-button px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20 disabled:opacity-50 monospace"
                 >
-                  {isDeleting ? 'Deleting...' : `Delete ${selectedIds.size}`}
+                  <Trash2 className="w-4 h-4" />
+                  <span>{isDeleting ? 'DELETING...' : `DELETE ${selectedIds.size}`}</span>
                 </button>
               </>
             )}
@@ -171,10 +183,10 @@ export default function MemoryTimeline() {
 
       {/* Memory cards */}
       {memories.length === 0 ? (
-        <div className="glass-strong rounded-3xl p-8 text-center shadow-float animate-fade-in">
-          <div className="text-4xl mb-3">🧠</div>
-          <div className="text-sm text-gray-400">No memories yet</div>
-          <div className="text-xs text-gray-500 mt-2">
+        <div className="bg-black/40 border border-cyan-500/30 rounded p-8 text-center animate-fade-in">
+          <Database className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+          <div className="text-sm text-gray-400 monospace">NO MEMORIES FOUND</div>
+          <div className="text-xs text-gray-500 mt-2 monospace">
             Memories will appear here as you chat with Evelyn
           </div>
         </div>
@@ -182,8 +194,8 @@ export default function MemoryTimeline() {
         memories.map((memory, index) => (
           <div
             key={memory.id}
-            className={`glass-strong rounded-2xl p-4 shadow-float hover:shadow-xl transition-all animate-fade-in group ${
-              selectedIds.has(memory.id) ? 'ring-2 ring-purple-500' : ''
+            className={`bg-black/40 border rounded p-4 hover:border-cyan-500/50 transition-all animate-fade-in group ${
+              selectedIds.has(memory.id) ? 'border-cyan-500' : 'border-cyan-500/30'
             }`}
             style={{ animationDelay: `${index * 0.05}s` }}
           >
@@ -191,30 +203,27 @@ export default function MemoryTimeline() {
               {/* Checkbox */}
               <button
                 onClick={() => toggleSelection(memory.id)}
-                className={`flex-shrink-0 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
                   selectedIds.has(memory.id)
-                    ? 'bg-purple-500 border-purple-500'
-                    : 'border-gray-600 hover:border-purple-500'
+                    ? 'bg-cyan-500/20 border-cyan-500'
+                    : 'border-gray-600 hover:border-cyan-500'
                 }`}
               >
                 {selectedIds.has(memory.id) && (
-                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
+                  <CheckSquare className="w-4 h-4 text-cyan-400" />
                 )}
               </button>
 
               {/* Type badge */}
-              <div className={`flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br ${getTypeColor(memory.type)} flex items-center justify-center text-xs font-bold text-white shadow-lg`}>
-                {memory.type[0].toUpperCase()}
+              <div className={`flex-shrink-0 px-2 py-1 rounded border text-[10px] font-bold uppercase monospace ${getTypeBadgeColor(memory.type)}`}>
+                {memory.type}
               </div>
               
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-semibold text-white capitalize">{memory.type}</span>
-                  <div className="flex-1 h-px bg-gradient-to-r from-gray-600 to-transparent" />
-                  <span className="text-xs text-gray-500">{(memory.importance * 100).toFixed(0)}%</span>
-                  <span className={`px-2 py-0.5 rounded-lg text-[10px] font-medium ${
+                  <div className="flex-1 h-px bg-gradient-to-r from-cyan-500/30 to-transparent" />
+                  <span className="text-xs text-gray-500 monospace">{(memory.importance * 100).toFixed(0)}%</span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-medium monospace uppercase ${
                     memory.privacy === 'private' ? 'bg-red-500/20 text-red-400' :
                     memory.privacy === 'ephemeral' ? 'bg-yellow-500/20 text-yellow-400' :
                     'bg-green-500/20 text-green-400'
@@ -225,7 +234,7 @@ export default function MemoryTimeline() {
 
                 {/* Memory text - expandable */}
                 <p 
-                  className={`text-xs text-gray-300 leading-relaxed cursor-pointer ${
+                  className={`text-xs text-gray-300 leading-relaxed cursor-pointer monospace ${
                     expandedId === memory.id ? '' : 'line-clamp-2'
                   }`}
                   onClick={() => setExpandedId(expandedId === memory.id ? null : memory.id)}
@@ -236,13 +245,13 @@ export default function MemoryTimeline() {
                 {memory.text.length > 150 && (
                   <button
                     onClick={() => setExpandedId(expandedId === memory.id ? null : memory.id)}
-                    className="text-xs text-purple-400 hover:text-purple-300 mt-1"
+                    className="text-xs text-cyan-400 hover:text-cyan-300 mt-1 monospace"
                   >
-                    {expandedId === memory.id ? 'Show less' : 'Show more...'}
+                    {expandedId === memory.id ? '▼ SHOW LESS' : '▶ SHOW MORE'}
                   </button>
                 )}
 
-                <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-500">
+                <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-500 monospace">
                   <span>ID: {memory.id}</span>
                   <span>•</span>
                   <span>{new Date(memory.createdAt).toLocaleString()}</span>
@@ -253,14 +262,12 @@ export default function MemoryTimeline() {
               <button
                 onClick={() => deleteMemory(memory.id)}
                 disabled={isDeleting}
-                className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                className={`flex-shrink-0 w-8 h-8 rounded flex items-center justify-center transition-all ${
                   selectedIds.has(memory.id) || 'opacity-0 group-hover:opacity-100'
-                } glass-dark hover:bg-red-500/20 disabled:opacity-50`}
+                } bg-black/60 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500 disabled:opacity-50`}
                 title="Delete memory"
               >
-                <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
+                <Trash2 className="w-4 h-4 text-red-400" />
               </button>
             </div>
           </div>

@@ -204,16 +204,17 @@ class SmartTruncationEngine {
       ) {
         try {
           // Store as memory with elevated importance
+          // Use assistant message ID as source since memory should link to the response
           const memory = await memoryEngine.classifyAndStore(
             userMsg.message.content,
             assistantMsg.message.content,
-            userMsg.message.id,
+            assistantMsg.message.id, // Use assistant message ID, not user message ID
             'private' // Mark as private by default
           );
           
           if (memory) {
             memoriesCreated++;
-            console.log(`[Truncation] Saved message pair #${userMsg.message.id} as memory (score: ${userMsg.score.toFixed(2)})`);
+            console.log(`[Truncation] Saved message pair (user #${userMsg.message.id} -> assistant #${assistantMsg.message.id}) as memory (score: ${userMsg.score.toFixed(2)})`);
           }
         } catch (error) {
           console.error('[Truncation] Error storing memory:', error);

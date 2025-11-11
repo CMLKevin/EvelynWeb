@@ -21,25 +21,11 @@ model Message {
   tokensIn   Int      @default(0)
   tokensOut  Int      @default(0)
   createdAt  DateTime @default(now())
-  chapterId  Int?
   auxiliary  String?  // JSON: { toolCalls, searchUsed, retrievalIds, moodSnapshot }
   
-  chapter    Chapter? @relation(fields: [chapterId], references: [id])
   memories   Memory[]
   
   @@index([createdAt])
-}
-
-model Chapter {
-  id              Int      @id @default(autoincrement())
-  title           String
-  summary         String
-  startMessageId  Int?
-  endMessageId    Int?
-  createdAt       DateTime @default(now())
-  features        String?  // JSON: { topicVector, keywords, participants }
-  
-  messages        Message[]
 }
 
 model Memory {

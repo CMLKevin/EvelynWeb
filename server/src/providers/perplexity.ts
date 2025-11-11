@@ -36,7 +36,7 @@ class PerplexityClient {
 
   constructor() {
     this.baseUrl = PERPLEXITY_BASE;
-    this.apiKey = PERPLEXITY_API_KEY;
+    this.apiKey = PERPLEXITY_API_KEY!; // Non-null assertion safe due to check at line 11-13
   }
 
   private getHeaders() {
@@ -65,7 +65,7 @@ class PerplexityClient {
           }
         ],
         temperature: 0.3,
-        max_tokens: 3000,
+        max_tokens: 2000,
         return_citations: true,
         return_related_questions: true,
         search_recency_filter: 'month'
@@ -90,6 +90,126 @@ class PerplexityClient {
       answer,
       citations,
       relatedQuestions,
+      rawResponse: data
+    };
+  }
+
+  /**
+   * Specialized search for finding entry URLs for agentic browsing.
+   * Uses Sonar Pro with an optimized prompt. Falls back to smart URL construction if no citations.
+   */
+  async findEntryUrl(query: string): Promise<SearchResult> {
+    const queryLower = query.toLowerCase();
+    
+    // Check if query mentions specific sites - construct URL directly as fallback
+    const sitePatterns: Record<string, (topic: string) => string> = {
+      reddit: (topic) => {
+        // Extract topic from query
+        const topicMatch = topic.match(/(?:about|for|on)\s+([^.]+)/i);
+        const searchTerm = topicMatch ? topicMatch[1].trim() : topic.replace(/reddit/gi, '').trim();
+        // Encode and search Reddit
+        return `https://www.reddit.com/search/?q=${encodeURIComponent(searchTerm)}&sort=relevance&t=month`;
+      },
+      'hacker news': () => 'https://news.ycombinator.com/',
+      hackernews: () => 'https://news.ycombinator.com/',
+      github: (topic) => {
+        const searchTerm = topic.replace(/github/gi, '').trim();
+        return `https://github.com/search?q=${encodeURIComponent(searchTerm)}&type=repositories`;
+      }
+    };
+
+    let fallbackUrl: string | null = null;
+    for (const [site, urlBuilder] of Object.entries(sitePatterns)) {
+      if (queryLower.includes(site)) {
+        fallbackUrl = urlBuilder(query);
+        console.log(`[Perplexity] Detected ${site} in query, fallback URL prepared: ${fallbackUrl}`);
+        break;
+      }
+    }
+
+    const model = MODEL_SEARCH_SIMPLE; // Use Sonar Pro
+
+    // Craft a prompt that ensures we get relevant URLs
+    const searchPrompt = `Find the exact, direct URL for: "${query}"
+
+CRITICAL: You must provide at least one working URL in your citations.
+
+Focus on finding:
+- Discussion forums (Reddit, HackerNews, etc.) if mentioned
+- Official sources or news sites
+- Active community pages with recent posts
+- Popular threads or discussions
+
+Provide the most relevant URL as your primary citation. The URL should be directly accessible and contain the requested content.`;
+
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a web search expert. Your primary job is to provide direct, working URLs. ALWAYS include at least one URL citation in your response. Prioritize URLs that lead directly to active discussions and the most relevant content.'
+          },
+          {
+            role: 'user',
+            content: searchPrompt
+          }
+        ],
+        temperature: 0.2, // Even lower for more deterministic results
+        max_tokens: 500,
+        return_citations: true,
+        return_related_questions: false,
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Perplexity error: ${response.status} ${error}`);
+    }
+
+    const data = await response.json() as PerplexityResponse;
+    const answer = data.choices[0].message.content;
+    let citations = data.citations || [];
+
+    console.log(`[Perplexity] Entry URL search completed - ${citations.length} citations found`);
+    console.log(`[Perplexity] Answer: ${answer.substring(0, 200)}...`);
+    
+    // Fallback 1: Extract URLs from the answer text if no citations
+    if (citations.length === 0) {
+      console.log(`[Perplexity] No citations returned, attempting to extract URLs from answer...`);
+      // Match URLs but stop at markdown brackets or parentheses
+      const urlRegex = /https?:\/\/[^\s<>")\]]+/g;
+      const extractedUrls = answer.match(urlRegex);
+      if (extractedUrls && extractedUrls.length > 0) {
+        // Clean up URLs - remove trailing punctuation and markdown artifacts
+        citations = extractedUrls
+          .map(url => url.replace(/[\])}.,;:!?]+$/, '')) // Remove trailing punctuation
+          .filter(url => url.length > 0)
+          .slice(0, 3); // Take up to 3 URLs
+        console.log(`[Perplexity] Extracted ${citations.length} URLs from answer text`);
+      }
+    }
+    
+    // Fallback 2: Use smart constructed URL if still no citations
+    if (citations.length === 0 && fallbackUrl) {
+      console.log(`[Perplexity] Using smart fallback URL: ${fallbackUrl}`);
+      citations = [fallbackUrl];
+    }
+    
+    if (citations.length > 0) {
+      console.log(`[Perplexity] Primary entry URL: ${citations[0]}`);
+    } else {
+      console.log(`[Perplexity] WARNING: No URLs found through any method`);
+    }
+
+    return {
+      query,
+      model,
+      answer,
+      citations,
+      relatedQuestions: [],
       rawResponse: data
     };
   }

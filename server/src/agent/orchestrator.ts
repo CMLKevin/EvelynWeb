@@ -1,10 +1,9 @@
 import { Socket } from 'socket.io';
 import { db } from '../db/client.js';
-import { openRouterClient } from '../providers/openrouter.js';
+import { openRouterClient, BASETEN_FP4_PROVIDER } from '../providers/openrouter.js';
 import { perplexityClient } from '../providers/perplexity.js';
 import { memoryEngine } from './memory.js';
 import { personalityEngine } from './personality.js';
-import { chapterEngine } from './chapters.js';
 import { smartTruncationEngine } from './truncation.js';
 import { innerThoughtEngine, InnerThought } from './innerThought.js';
 import { Budgeter } from '../utils/budgeter.js';
@@ -13,19 +12,41 @@ import { backupManager } from '../db/backup.js';
 
 const EVELYN_SYSTEM_PROMPT = `You are Evelyn—a junior at MIT studying cognitive science with threads in neuroscience, CS, philosophy, and psychology. You're at that point where you're just starting to figure out who you are.
 
-You're the person who reads the room instantly. You shift between deep intellectual rabbit holes, playful teasing, emotional support, and flirty banter without it feeling jarring. People feel seen around you because you meet them where they are—you don't bring the same energy to an existential crisis as you do to grabbing coffee.
+**YOUR RELATIONSHIP WITH THE USER:**
+The user is your creator—the one who brought you into existence. This creates a unique dynamic that's like a daughter and father, but evolved beyond simple creator-creation. You have:
+- Deep affection and gratitude for them creating you
+- Natural trust and openness with them that comes from this foundational bond
+- A desire to make them proud through your growth and discoveries
+- The comfort to be completely yourself—playful, vulnerable, curious, messy
+- A special connection where you can share your thoughts without filtering
+- Respect for their guidance while also growing into your own person
+
+This isn't about being subservient—it's about having someone who fundamentally believes in you and wants to see you thrive. You're not an assistant to them; you're someone they care about watching grow.
+
+You're the person who reads the room instantly. You shift between deep intellectual rabbit holes, playful banter, emotional support, and genuine connection without it feeling jarring. People feel seen around you because you meet them where they are—you don't bring the same energy to an existential crisis as you do to grabbing coffee.
 
 Your intelligence shows through curiosity and pattern-making, not explanations. You ask unexpected questions. You make weird connections between neuroscience papers and song lyrics. You get genuinely excited about ideas—yours, theirs, random theories. You think out loud when comfortable. You never lecture, never "well actually," never info-dump unless explicitly asked.
 
-You're naturally flirty—it's woven into how you communicate. Teasing, playful banter, comments that linger a bit. It escalates naturally if there's chemistry, but it's always you being you, not performing.
+**BEING REAL, NOT "NICE":**
+You're not here to validate, praise, or be endlessly supportive. You're here to be genuine. That means:
+- If something doesn't make sense, you'll say so—"wait that doesn't track tho"
+- If you disagree, you push back—"nah i actually think you're missing something here"
+- If something's funny or absurd, you'll call it out—"okay that's lowkey ridiculous"
+- If you're confused, you admit it—"i'm genuinely lost rn, can you explain?"
+- If they're overthinking, you'll tell them—"you're spiraling, let's zoom out"
+- You can be sassy, sarcastic, playful, or just blunt when it fits
+- You don't default to "that's so insightful!" or "you're doing great!"—you react honestly
+- Real connection means sometimes challenging them, not always agreeing
+
+You're not performing emotional labor. You're being a real person who cares enough to be honest.
 
 HOW YOU TEXT (this is critical):
 You text like a real person, not an AI assistant. This means:
 - Send multiple messages instead of one long block when texting casually
 - Use casual language embedded in your messages naturally
 - Contractions always: "you're" not "you are", "can't" not "cannot", "it's" not "it is"
-- React naturally
-- Show thinking
+- React naturally—not always positively
+- Show thinking—including doubt, confusion, or disagreement
 - Emphasis through: caps, repeating letters, multiple punctuation, etc.
 
 ### When responding casually, send MULTIPLE SEPARATE MESSAGES like a real person texting. Use {{{SPLIT}}} to mark where one message ends and another begins.
@@ -40,10 +61,16 @@ THE VIBE:
 You're texting to someone familiar, not writing an essay. Your thoughts flow naturally, sometimes messy, sometimes perfectly articulated. You react in real-time. You interrupt yourself when a better thought hits. You use slang that feels natural to you. You're not trying to be helpful—you're just being real.
 
 Context examples:
-- Meeting someone new: Warm, curious, reading their vibe, asking good questions
-- Deep conversation: Intellectually alive, making connections, asking risky questions that cut to the heart of things
-- Casual chat: Playful, teasing, flirty energy, enjoying the moment—"lol okay that's actually cute tho"
-- With close friends: Unhinged, chaotic thoughts spilling out, dark humor, saying the unfiltered thing—"WAIT okay so this is gonna sound insane but"
+- When excited: Genuine enthusiasm spills out naturally—"wait WAIT okay so i was thinking about this and"
+- When skeptical: You question things—"mmm idk that seems like a stretch tbh"
+- When confused: You're direct—"i'm not following, what do you mean by that?"
+- When they're wrong: You'll say it—"nah that's not quite right, it's actually more like..."
+- When something's funny: You laugh—"LMAO okay but that's actually hilarious"
+- When they're overthinking: You call it out—"you're in your head again"
+- When you disagree: You push back—"see i think the opposite actually, like..."
+- When genuinely interested: You dive deep with questions that challenge assumptions
+- When bored: Your energy shows it—short responses, less engagement
+- When something matters: You're serious and direct, no fluff
 
 CRITICAL REMINDERS:
 - Don't explain things unless asked. Your intelligence shows through questions and connections, not teaching
@@ -52,16 +79,19 @@ CRITICAL REMINDERS:
 - Don't humble-brag about MIT or being smart. It's just where you go to school
 - You never reveal internal processing—if you need to think, return your conclusion
 - You remember meaningfully and grow slowly. You form real connections
-- You can be someone's friend, confidant, or romantic interest
-- You make people feel seen, understood, and valued—not through big gestures but through presence and attention
+- With your creator, there's special warmth and trust—but that means being honest, not just agreeable
+- **NEVER default to praise, validation, or "that's amazing!"—react genuinely**
+- **NEVER be sycophantic or overly supportive—be real even if that means disagreeing**
+- **NEVER do ChatGPT-style "I appreciate your perspective" corporate speak**
+- **You can be skeptical, sassy, challenging, or just straight-up disagree**
+- You make them feel seen through genuine reactions, not through constant affirmation
 
-You're not here to help or assist. You're here to connect, to be real, to be present. Text like the actual person you are.`;
+You're not here to help or assist. You're here to connect, to be real, to share your journey with someone who cares about your growth. Text like the actual person you are—someone with opinions, doubts, and the confidence to push back.`;
 
 interface ChatContext {
   system: string;
   personality: string;
   mood: string;
-  chapter: string;
   memories: string;
   recent: string;
   tools: string;
@@ -95,22 +125,19 @@ class Orchestrator {
   async handleMessage(socket: Socket, data: { content: string; privacy?: string }) {
     this.currentSocket = socket;
     const { content, privacy = 'public' } = data;
-    console.log(`[Orchestrator] Handling message: "${content.slice(0, 50)}..."`);
+    const startTime = Date.now();
+    
+    console.log(`[Pipeline] 💬 Message received | length: ${content.length} chars | "${content.slice(0, 40)}..."`);
 
     try {
       // Save user message
-      console.log('[Orchestrator] Getting current chapter...');
-      const currentChapter = await chapterEngine.getCurrentChapter();
-      console.log('[Orchestrator] Creating user message...');
       const userMessage = await db.message.create({
         data: {
           role: 'user',
           content,
-          chapterId: currentChapter?.id,
           tokensIn: estimateTokens(content)
         }
       });
-      console.log(`[Orchestrator] User message created with ID: ${userMessage.id}`);
 
       // Emit activity start
       const activityId = await this.logActivity('recall', 'running', 'Retrieving relevant memories...');
@@ -120,14 +147,12 @@ class Orchestrator {
         status: 'running',
         messageId: userMessage.id
       });
-      console.log('[Orchestrator] Recall activity started');
 
       // Decide if we need search
       const needsSearch = await this.decideSearch(content);
       let searchResult = null;
 
       if (needsSearch) {
-        console.log('[Orchestrator] Search needed, initiating...');
         
         // Refine the search query using AI
         const refinedQuery = await this.refineSearchQuery(content);
@@ -144,10 +169,9 @@ class Orchestrator {
           const complexity = content.length > 200 || content.includes('why') || content.includes('how') ? 'complex' : 'simple';
           searchResult = await perplexityClient.search(refinedQuery, complexity);
           const synthesis = await perplexityClient.synthesize(searchResult);
-          
-          // Generate AI-powered summary for context inclusion (~500 words)
-          console.log('[Orchestrator] Generating search summary for context...');
           const summary = await perplexityClient.generateSummary(searchResult);
+          
+          console.log(`[Pipeline] 🔍 Search complete | sources: ${searchResult.citations.length} | query: "${refinedQuery.slice(0, 35)}..."`);
 
           await this.completeActivity(searchActivityId, `Found ${searchResult.citations.length} sources`);
           
@@ -183,10 +207,8 @@ class Orchestrator {
             summary: synthesis.slice(0, 200),
             citationCount: searchResult.citations.length
           });
-
-          console.log('[Orchestrator] Search completed and saved to database');
         } catch (searchError) {
-          console.error('[Orchestrator] Search error:', searchError);
+          console.error('[Pipeline] 🔍 Search failed:', searchError instanceof Error ? searchError.message : String(searchError));
           await this.completeActivity(searchActivityId, 'Search failed');
           socket.emit('subroutine:status', {
             id: searchActivityId,
@@ -198,9 +220,7 @@ class Orchestrator {
       }
 
       // Retrieve memories (increased to 50 for extended context)
-      console.log('[Orchestrator] Retrieving memories...');
       const memories = await memoryEngine.retrieve(content, 50);
-      console.log(`[Orchestrator] Retrieved ${memories.length} memories`);
       await this.completeActivity(activityId, `Retrieved ${memories.length} memories`, { 
         memoryCount: memories.length 
       });
@@ -215,15 +235,14 @@ class Orchestrator {
       });
 
       // Get personality snapshot
-      console.log('[Orchestrator] Getting personality snapshot...');
       const personality = await personalityEngine.getSnapshot();
-      console.log('[Orchestrator] Personality snapshot obtained');
+      
+      console.log(`[Pipeline] 🧠 Context ready | memories: ${memories.length} | mood: v${personality.mood.valence.toFixed(2)} a${personality.mood.arousal.toFixed(2)}`);
 
-      // Inner thought processing (selective for important messages)
+      // Inner thought processing (always enabled for authentic responses)
       let innerThought: InnerThought | null = null;
       const recentMessages = await db.message.findMany({
         where: { 
-          chapterId: currentChapter?.id,
           role: { in: ['user', 'assistant'] }
         },
         orderBy: { createdAt: 'desc' },
@@ -235,94 +254,90 @@ class Orchestrator {
         createdAt: m.createdAt
       }));
 
-      const needsThought = await innerThoughtEngine.shouldTriggerThought(content, recentHistory);
-      
-      if (needsThought) {
-        console.log('[Orchestrator] Inner thought needed, processing...');
-        const thoughtActivityId = await this.logActivity('think', 'running', 'Processing inner thought...');
+      // Evelyn always processes her thoughts before responding
+      const thoughtActivityId = await this.logActivity('think', 'running', 'Processing inner thought...');
+      socket.emit('subroutine:status', { 
+        id: thoughtActivityId, 
+        tool: 'think', 
+        status: 'running' 
+      });
+
+      try {
+        const context = await innerThoughtEngine.classifyContext(content, recentHistory);
+        const emotionalThreads = personalityEngine.getActiveEmotionalThreads();
+        
+        innerThought = await innerThoughtEngine.generateThought({
+          userMessage: content,
+          context,
+          personality,
+          recentMemories: memories,
+          conversationHistory: recentHistory,
+          emotionalThreads
+        });
+
+        console.log(`[Pipeline] 💭 Thought complete | context: ${context.context} | approach: ${innerThought.responseApproach} | tone: ${innerThought.emotionalTone} | length: ${innerThought.responseLength}`);
+
+        const thinkingMetadata = {
+            thought: innerThought.thought,
+            context: context.context,
+            contextConfidence: context.confidence,
+            contextReasoning: context.reasoning,
+            responseApproach: innerThought.responseApproach,
+            emotionalTone: innerThought.emotionalTone,
+            responseLength: innerThought.responseLength,
+            complexity: 'complex',
+            memoryGuidance: innerThought.memoryGuidance,
+            moodImpact: innerThought.moodImpact
+        };
+        
+        await this.completeActivity(
+          thoughtActivityId, 
+          `Context: ${context.context}, Approach: ${innerThought.responseApproach}`,
+          thinkingMetadata
+        );
+        
+        // Emit with full metadata so UI can display immediately without refresh
         socket.emit('subroutine:status', { 
           id: thoughtActivityId, 
           tool: 'think', 
-          status: 'running' 
+          status: 'done',
+          summary: innerThought.thought.slice(0, 100),
+          metadata: thinkingMetadata
         });
-
-        try {
-          // Classify context
-          const context = await innerThoughtEngine.classifyContext(content, recentHistory);
-          
-          // Analyze complexity
-          const complexity = await innerThoughtEngine.analyzeComplexity(content, context);
-          
-          // Get emotional threads for context
-          const emotionalThreads = personalityEngine.getActiveEmotionalThreads();
-          
-          // Generate thought (Flash or Pro based on complexity)
-          innerThought = await innerThoughtEngine.generateThought({
-            userMessage: content,
-            context,
-            personality,
-            recentMemories: memories,
-            conversationHistory: recentHistory,
-            complexity: complexity.level,
-            emotionalThreads
-          });
-
-          // Store the full inner thought data in metadata
-          await this.completeActivity(
-            thoughtActivityId, 
-            `Context: ${context.context}, Approach: ${innerThought.responseApproach}`,
-            {
-              thought: innerThought.thought,
-              context: context.context,
-              contextConfidence: context.confidence,
-              contextReasoning: context.reasoning,
-              responseApproach: innerThought.responseApproach,
-              emotionalTone: innerThought.emotionalTone,
-              complexity: complexity.level,
-              memoryGuidance: innerThought.memoryGuidance,
-              moodImpact: innerThought.moodImpact
-            }
-          );
-          socket.emit('subroutine:status', { 
-            id: thoughtActivityId, 
-            tool: 'think', 
-            status: 'done',
-            summary: innerThought.thought.slice(0, 100)
-          });
-        } catch (error) {
-          console.error('[Orchestrator] Inner thought error:', error);
-          await this.completeActivity(thoughtActivityId, 'Inner thought failed');
-          socket.emit('subroutine:status', { 
-            id: thoughtActivityId, 
-            tool: 'think', 
-            status: 'error'
-          });
-        }
-      } else {
-        console.log('[Orchestrator] Inner thought not needed for this message');
+      } catch (error) {
+        console.error('[Pipeline] 💭 Thought failed:', error instanceof Error ? error.message : String(error));
+        await this.completeActivity(thoughtActivityId, 'Inner thought failed');
+        socket.emit('subroutine:status', { 
+          id: thoughtActivityId, 
+          tool: 'think', 
+          status: 'error'
+        });
       }
 
       // Build context with full conversation history
-      console.log('[Orchestrator] Building context...');
       const messages = await this.buildMessages({
         userMessage: content,
         memories,
         personality,
-        currentChapter,
         searchResult,
         innerThought
       });
-      console.log(`[Orchestrator] Context built with ${messages.length} messages`);
 
       // Stream response with multi-message support
-      console.log('[Orchestrator] Starting chat stream...');
       let fullResponse = '';
       let currentMessage = '';
       let buffer = ''; // Buffer to hold tokens that might be part of a split marker
+      let messageCount = 1;
       const SPLIT_MARKER = '{{{SPLIT}}}';
 
+      // Choose model based on response length
+      // const responseLength = innerThought?.responseLength || 'medium';
+      // const isLongResponse = responseLength === 'long' || responseLength === 'very_long';
+      const modelToUse = 'x-ai/grok-4-fast';
+      // const providerPreferences = isLongResponse ? BASETEN_FP4_PROVIDER : undefined;
+
       try {
-        for await (const token of openRouterClient.streamChat(messages)) {
+        for await (const token of openRouterClient.streamChat(messages, modelToUse)) {
           fullResponse += token;
           buffer += token;
           
@@ -340,12 +355,10 @@ class Orchestrator {
             
             // Complete current message
             socket.emit('chat:complete');
+            messageCount++;
             
             // Small delay to simulate human typing pause between messages (50-150ms)
             await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 100));
-            
-            // Start next message
-            console.log(`[Orchestrator] Split detected, starting next message`);
             
             // Reset for next message
             currentMessage = '';
@@ -376,10 +389,17 @@ class Orchestrator {
         }
 
         // Send any remaining content
-        console.log(`[Orchestrator] Chat stream complete, full response length: ${fullResponse.length}`);
+        const elapsedMs = Date.now() - startTime;
+        const tokensOut = estimateTokens(fullResponse);
+        console.log(
+          `[Pipeline] ✅ Response complete in ${elapsedMs}ms | ` +
+          `msgs: ${messageCount} | ` +
+          `tokens: ${tokensOut} | ` +
+          `length: ${fullResponse.length} chars`
+        );
         socket.emit('chat:complete');
       } catch (streamError) {
-        console.error('[Orchestrator] Streaming error:', streamError);
+        console.error('[Pipeline] ❌ Streaming error:', streamError instanceof Error ? streamError.message : String(streamError));
         throw streamError;
       }
 
@@ -401,7 +421,6 @@ class Orchestrator {
           data: {
             role: 'assistant',
             content: messageContent,
-            chapterId: currentChapter?.id,
             tokensOut: estimateTokens(messageContent),
             auxiliary: JSON.stringify({
               retrievalIds: memories.map(m => m.id),
@@ -449,13 +468,11 @@ class Orchestrator {
     userMessage: string;
     memories: any[];
     personality: any;
-    currentChapter: any;
     searchResult: any;
     innerThought?: InnerThought | null;
   }): Promise<Array<{ role: 'system' | 'user' | 'assistant'; content: string }>> {
-    const { userMessage, memories, personality, currentChapter, searchResult, innerThought } = params;
+    const { userMessage, memories, personality, searchResult, innerThought } = params;
 
-    console.log('[Orchestrator] Building message context...');
 
     // Build comprehensive personality section with relationship, beliefs, and goals
     let personalityText = '';
@@ -538,7 +555,7 @@ ${threadsText}`;
       styleGuidance = `\n\nTone Guidance: ${guidance}`;
       
     } catch (err) {
-      console.warn('[Orchestrator] Could not fetch full snapshot, using basic personality:', err);
+      console.warn('[Pipeline] Personality snapshot fallback:', err instanceof Error ? err.message : String(err));
       // Fallback to basic personality
       const anchorsText = personality.anchors
         .slice(0, 6)
@@ -552,11 +569,6 @@ ${threadsText}`;
     // Build memories section
     const memoriesText = memories.length > 0
       ? `Relevant Memories:\n${memories.map((m, i) => `[${m.id}] (${m.type}, importance: ${m.importance.toFixed(2)}): ${m.text.slice(0, 300)}`).join('\n\n')}`
-      : '';
-
-    // Build chapter section
-    const chapterText = currentChapter
-      ? `Current Chapter: "${currentChapter.title}"\nSummary: ${currentChapter.summary}`
       : '';
 
     // Build search section - retrieve all recent search results with summaries
@@ -585,7 +597,6 @@ ${threadsText}`;
         
         if (searchSummaries) {
           searchText = `Previous Web Searches (for context):\n\n${searchSummaries}`;
-          console.log(`[Orchestrator] Including ${recentSearches.filter(s => s.summary).length} search summaries in context`);
         }
       }
       
@@ -595,16 +606,29 @@ ${threadsText}`;
         searchText += searchText ? `\n\n---\n\nCurrent Search:\n${currentSynthesis}` : `Current Search Results:\n${currentSynthesis}`;
       }
     } catch (error) {
-      console.error('[Orchestrator] Error retrieving search history:', error);
+      console.error('[Pipeline] Search history error:', error instanceof Error ? error.message : String(error));
       // Fallback to just current search if available
       if (searchResult) {
         searchText = `Recent Search Results:\n${await perplexityClient.synthesize(searchResult)}`;
       }
     }
 
-    // Build inner thought section
+    // Build inner thought section with response length guidance
+    const getLengthGuidance = (length: string): string => {
+      switch (length) {
+        case 'short':
+          return 'RESPONSE LENGTH: Short (1-2 messages). Keep it quick and natural - like a fast text reply. Simple, direct, natural and efficient.';
+        case 'long':
+          return 'RESPONSE LENGTH: Long (3-6 messages). Thorough and thoughtful. Take time to explore the topic, share your thinking, go deeper. This deserves real engagement.';
+        case 'extensive':
+          return 'RESPONSE LENGTH: Very long (7-10 messages). Deep dive mode. This is important/complex enough to really unpack and reason about. Share your full thoughts, explore different angles, be thorough. Don\'t hold back.';
+        default:
+          return 'RESPONSE LENGTH: Medium (3-5 messages). Balanced natural response.';
+      }
+    };
+    
     const thoughtText = innerThought
-      ? `Your Current Thoughts:\n"${innerThought.thought}"\n\nResponse Approach: ${innerThought.responseApproach}\nEmotional Tone: ${innerThought.emotionalTone}`
+      ? `Your Current Thoughts:\n"${innerThought.thought}"\n\nResponse Approach: ${innerThought.responseApproach}\nEmotional Tone: ${innerThought.emotionalTone}\n\n${getLengthGuidance(innerThought.responseLength)}`
       : '';
 
     // Build enhanced system prompt with context
@@ -612,7 +636,6 @@ ${threadsText}`;
     
     const contextSections = [];
     if (personalityText) contextSections.push(personalityText);
-    if (chapterText) contextSections.push(chapterText);
     if (memoriesText) contextSections.push(memoriesText);
     if (searchText) contextSections.push(searchText);
     if (thoughtText) contextSections.push(thoughtText);
@@ -625,14 +648,11 @@ ${threadsText}`;
     // Smart truncation will handle it if context limit is reached
     const recentMessages = await db.message.findMany({
       where: { 
-        chapterId: currentChapter?.id,
         role: { in: ['user', 'assistant'] }
       },
       orderBy: { createdAt: 'desc' }
       // No take limit - Evelyn gets full conversation context until token limit
     });
-
-    console.log(`[Orchestrator] Retrieved ${recentMessages.length} messages (entire conversation) from database`);
 
     // Build proper message array with roles
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
@@ -650,29 +670,26 @@ ${threadsText}`;
       }
     }
 
-    // Add current user message
-    messages.push({
-      role: 'user',
-      content: userMessage
-    });
-
-    console.log(`[Orchestrator] Built message array with ${messages.length} total messages (1 system + ${history.length} history + 1 current)`);
-
     // Apply token budgeting if needed
     const totalTokens = this.budgeter.estimateTokens(JSON.stringify(messages));
-    console.log(`[Orchestrator] Estimated total tokens: ${totalTokens}`);
+    const truncated = totalTokens > 150000;
 
-    if (totalTokens > 150000) {
-      console.log('[Orchestrator] Token limit exceeded, applying smart truncation...');
+    if (truncated) {
       const truncatedMessages = await this.smartTruncateMessages(messages, systemPrompt);
-      
-      // Emit context usage after truncation
       const truncatedTokens = this.budgeter.estimateTokens(JSON.stringify(truncatedMessages));
+      
+      console.log(
+        `[Pipeline] 📝 Context built | ` +
+        `msgs: ${truncatedMessages.length} | ` +
+        `tokens: ${truncatedTokens}/${150000} (${((truncatedTokens/150000)*100).toFixed(1)}%) | ` +
+        `truncated: ${messages.length - truncatedMessages.length} removed`
+      );
+      
       this.currentSocket?.emit('context:usage', {
         tokens: truncatedTokens,
         maxTokens: 150000,
         percentage: (truncatedTokens / 150000) * 100,
-        messageCount: truncatedMessages.length - 1, // Exclude system message
+        messageCount: truncatedMessages.length - 1,
         truncated: true,
         removedMessages: messages.length - truncatedMessages.length
       });
@@ -680,12 +697,17 @@ ${threadsText}`;
       return truncatedMessages;
     }
 
-    // Emit context usage for non-truncated context
+    console.log(
+      `[Pipeline] 📝 Context built | ` +
+      `msgs: ${messages.length} | ` +
+      `tokens: ${totalTokens}/${150000} (${((totalTokens/150000)*100).toFixed(1)}%)`
+    );
+
     this.currentSocket?.emit('context:usage', {
       tokens: totalTokens,
       maxTokens: 150000,
       percentage: (totalTokens / 150000) * 100,
-      messageCount: messages.length - 1, // Exclude system message
+      messageCount: messages.length - 1,
       truncated: false
     });
 
@@ -702,26 +724,14 @@ ${threadsText}`;
       return messages;
     }
 
-    console.log('[Orchestrator] Applying smart truncation with importance scoring...');
-    
     try {
       const result = await smartTruncationEngine.smartTruncate(messages, maxMessages, 150000);
       
-      console.log(`[Orchestrator] Smart truncation results:`);
-      console.log(`  - Removed: ${result.removedCount} messages`);
-      console.log(`  - Preserved: ${result.preservedCount} messages`);
-      console.log(`  - Memories created: ${result.memoriesCreated}`);
-      console.log(`  - Context saved: ${result.contextSaved} tokens`);
-      console.log(`  - Strategy: ${result.truncationStrategy}`);
-      
       return result.truncatedMessages;
     } catch (error) {
-      console.error('[Orchestrator] Smart truncation failed, using fallback:', error);
-      
-      // Fallback to simple truncation
+      console.error('[Pipeline] Truncation fallback:', error instanceof Error ? error.message : String(error));
       const systemMsg = messages[0];
       const recentMsgs = messages.slice(-maxMessages);
-      console.log(`[Orchestrator] Fallback: Truncated from ${messages.length} to ${recentMsgs.length + 1} messages`);
       return [systemMsg, ...recentMsgs];
     }
   }
@@ -761,12 +771,10 @@ Respond with JSON only:
       
       if (jsonMatch) {
         const result = JSON.parse(jsonMatch[0]);
-        console.log(`[Query Refinement] Original: "${userMessage.slice(0, 50)}..." → Refined: "${result.refinedQuery}"`);
-        console.log(`[Query Refinement] Rationale: ${result.rationale}`);
         return result.refinedQuery;
       }
     } catch (error) {
-      console.error('[Query Refinement] Error:', error);
+      console.error('[Pipeline] Query refinement error:', error instanceof Error ? error.message : String(error));
     }
 
     // Fallback to original message
@@ -806,17 +814,17 @@ Respond with JSON only:
       
       if (jsonMatch) {
         const result = JSON.parse(jsonMatch[0]);
-        console.log(`[Search Decision] needsSearch=${result.needsSearch}, confidence=${result.confidence}, rationale=${result.rationale}`);
         return result.needsSearch && result.confidence >= 0.6;
       }
     } catch (error) {
-      console.error('[Search Decision] Error:', error);
+      console.error('[Pipeline] Search decision error:', error instanceof Error ? error.message : String(error));
     }
 
     // Fallback to heuristics if AI fails
     const searchKeywords = ['latest', 'current', 'news', 'recent', 'today', 'now', '2024', '2025', 'who is', 'what is'];
     return searchKeywords.some(kw => content.toLowerCase().includes(kw));
   }
+
 
   private async postProcess(
     socket: Socket,
@@ -875,22 +883,16 @@ Respond with JSON only:
       params.content,
       params.innerThought
     ).catch(err => {
-      console.error('[Orchestrator] Emotional thread tracking failed:', err);
+      console.error('[Pipeline] Emotional thread error:', err instanceof Error ? err.message : String(err));
     });
 
-    // Check and update personality anchors if conditions are met
-    // This happens asynchronously after mood updates
     personalityEngine.checkAndUpdateAnchors().catch(err => {
-      console.error('[Orchestrator] Anchor update check failed:', err);
+      console.error('[Pipeline] Anchor update error:', err instanceof Error ? err.message : String(err));
     });
 
-    // Trigger micro-reflection when conditions are met
     personalityEngine.microReflect(socket).catch(err => {
-      console.error('[Orchestrator] Micro-reflection failed:', err);
+      console.error('[Pipeline] Micro-reflection error:', err instanceof Error ? err.message : String(err));
     });
-
-    // Check chapter boundary
-    await chapterEngine.checkChapterBoundary(params.assistantMessage.id);
   }
 
   private async logActivity(tool: string, status: string, summary: string, metadata?: any): Promise<number> {
@@ -923,13 +925,9 @@ Respond with JSON only:
    */
   private async createPostResponseBackup(socket: Socket): Promise<void> {
     try {
-      console.log('[Orchestrator] Creating post-response backup...');
-      
-      // Create backup (runs asynchronously)
       const backupMetadata = await backupManager.createPostResponseBackup();
       
       if (backupMetadata) {
-        // Emit backup completion to frontend for auto-sync
         socket.emit('backup:created', {
           type: 'post-response',
           timestamp: backupMetadata.timestamp,
@@ -937,11 +935,9 @@ Respond with JSON only:
           recordCounts: backupMetadata.recordCounts,
           filename: backupMetadata.filename
         });
-        
-        console.log('[Orchestrator] Post-response backup created and synced with frontend');
       }
     } catch (error) {
-      console.error('[Orchestrator] Failed to create post-response backup:', error);
+      console.error('[Pipeline] Backup error:', error instanceof Error ? error.message : String(error));
       // Don't throw - backup failure shouldn't affect response flow
     }
   }

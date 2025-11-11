@@ -1,7 +1,9 @@
+import { memo } from 'react';
 import { useStore } from '../../state/store';
 
-export default function TruncationIndicator() {
-  const { contextUsage } = useStore();
+const TruncationIndicator = memo(function TruncationIndicator() {
+  // Optimize store selector
+  const contextUsage = useStore(state => state.contextUsage);
 
   if (!contextUsage?.truncated) return null;
 
@@ -59,5 +61,7 @@ export default function TruncationIndicator() {
       </div>
     </div>
   );
-}
+});
+
+export default TruncationIndicator;
 

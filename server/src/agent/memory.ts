@@ -76,6 +76,17 @@ Evelyn's response: """
 class MemoryEngine {
   async retrieve(query: string, topK: number = 30): Promise<Memory[]> {
     try {
+      // Validate inputs
+      if (!query || query.trim().length === 0) {
+        console.warn('[Memory] Empty query provided, returning empty array');
+        return [];
+      }
+      
+      if (topK <= 0 || !Number.isInteger(topK)) {
+        console.warn(`[Memory] Invalid topK value: ${topK}, using default 30`);
+        topK = 30;
+      }
+      
       console.log(`[Memory] Retrieving memories for query: "${query.slice(0, 50)}..."`);
       
       // Embed query
@@ -106,13 +117,23 @@ class MemoryEngine {
       const scored = candidates.map((m: any) => {
         try {
           const embedding = JSON.parse(m.embedding) as number[];
+          
+          // Validate embedding dimension matches query
+          if (embedding.length !== queryEmbedding.length) {
+            console.warn(`[Memory] Dimension mismatch for memory ${m.id}: expected ${queryEmbedding.length}, got ${embedding.length}`);
+            return null;
+          }
+          
           const similarity = cosineSimilarity(queryEmbedding, embedding);
           
           // Recency boost (decay over 30 days) - using centralized temporal engine
           const recencyResult = temporalEngine.calculateMemoryRecency(m.lastAccessedAt);
           const recencyBoost = recencyResult.recencyBoost;
 
-          const score = similarity * (0.6 + 0.4 * m.importance) + recencyBoost;
+          // Validate importance is in valid range
+          const normalizedImportance = Math.max(0, Math.min(1, m.importance));
+
+          const score = similarity * (0.6 + 0.4 * normalizedImportance) + recencyBoost;
 
           return { m, score, embedding };
         } catch (parseError) {
@@ -156,6 +177,27 @@ class MemoryEngine {
       additionalContext: string;
     }
   ): Promise<Memory | null> {
+    // Validate inputs
+    if (!userMessage || !assistantMessage || !sourceMessageId) {
+      console.warn('[Memory] Invalid inputs for classifyAndStore, skipping');
+      return null;
+    }
+    
+    // Check if memory already exists for this source message
+    try {
+      const existingMemory = await db.memory.findFirst({
+        where: { sourceMessageId }
+      });
+      
+      if (existingMemory) {
+        console.log(`[Memory] Memory already exists for message #${sourceMessageId}, skipping duplicate`);
+        return null;
+      }
+    } catch (error) {
+      console.error('[Memory] Error checking for existing memory:', error);
+      // Continue anyway - better to risk duplicate than skip important memory
+    }
+    
     // Classify with Gemini Flash
     const prompt = MEMORY_CLASSIFICATION_PROMPT
       .replace('{{USER}}', userMessage)
@@ -167,11 +209,26 @@ class MemoryEngine {
       // Parse JSON
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        console.warn('No JSON in classification response');
+        console.warn('[Memory] No JSON in classification response');
         return null;
       }
 
-      const classification: MemoryClassification = JSON.parse(jsonMatch[0]);
+      let classification: MemoryClassification;
+      try {
+        classification = JSON.parse(jsonMatch[0]);
+      } catch (parseError) {
+        console.error('[Memory] Failed to parse classification JSON:', parseError);
+        console.error('[Memory] JSON content:', jsonMatch[0].slice(0, 200));
+        return null;
+      }
+
+      // Validate classification structure
+      if (typeof classification.importance !== 'number' || 
+          !classification.type || 
+          !classification.privacy) {
+        console.warn('[Memory] Invalid classification structure:', classification);
+        return null;
+      }
 
       // Apply heuristic adjustments
       let importance = classification.importance;
@@ -211,7 +268,7 @@ class MemoryEngine {
       }
 
       if (importance < 0.30) {
-        console.log(`[Memory] Importance ${importance.toFixed(2)} below threshold (0.40), skipping storage`);
+        console.log(`[Memory] Importance ${importance.toFixed(2)} below threshold (0.30), skipping storage`);
         return null;
       }
 
@@ -257,14 +314,24 @@ class MemoryEngine {
 
   async getMemoryById(id: number): Promise<Memory | null> {
     try {
+      if (!id || id <= 0) {
+        console.warn('[Memory] Invalid memory ID provided');
+        return null;
+      }
+      
       const memory = await db.memory.findUnique({ where: { id } });
       if (!memory) return null;
       
+      try {
       const embedding = JSON.parse(memory.embedding);
       return {
         ...memory,
         embedding
       };
+      } catch (parseError) {
+        console.error(`[Memory] Error parsing embedding for memory ${id}:`, parseError);
+        return null;
+      }
     } catch (error) {
       console.error(`[Memory] Error getting memory ${id}:`, error);
       return null;
@@ -272,6 +339,24 @@ class MemoryEngine {
   }
 
   async linkMemories(fromId: number, toId: number, relation: string, weight: number = 1.0): Promise<void> {
+    try {
+      // Validate inputs
+      if (!fromId || !toId || !relation) {
+        console.warn('[Memory] Invalid inputs for linkMemories');
+        return;
+      }
+      
+      if (fromId === toId) {
+        console.warn('[Memory] Cannot link memory to itself');
+        return;
+      }
+      
+      // Validate weight
+      if (typeof weight !== 'number' || weight < 0 || weight > 1) {
+        console.warn(`[Memory] Invalid weight ${weight}, clamping to [0, 1]`);
+        weight = Math.max(0, Math.min(1, weight));
+      }
+      
     await db.memoryLink.upsert({
       where: {
         fromId_toId_relation: { fromId, toId, relation }
@@ -279,6 +364,12 @@ class MemoryEngine {
       create: { fromId, toId, relation, weight },
       update: { weight }
     });
+      
+      console.log(`[Memory] Linked memories ${fromId} -> ${toId} (${relation}, weight: ${weight.toFixed(2)})`);
+    } catch (error) {
+      console.error(`[Memory] Error linking memories ${fromId} -> ${toId}:`, error);
+      throw error;
+    }
   }
 
   async getLinkedMemories(memoryId: number): Promise<Memory[]> {
@@ -307,6 +398,7 @@ class MemoryEngine {
   }
 
   async pruneEphemeralMemories(): Promise<number> {
+    try {
     // Delete ephemeral memories older than 24 hours
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const result = await db.memory.deleteMany({
@@ -315,10 +407,31 @@ class MemoryEngine {
         createdAt: { lt: cutoff }
       }
     });
+      
+      if (result.count > 0) {
+        console.log(`[Memory] Pruned ${result.count} ephemeral memories older than 24 hours`);
+      }
+      
     return result.count;
+    } catch (error) {
+      console.error('[Memory] Error pruning ephemeral memories:', error);
+      return 0;
+    }
   }
 
   async pruneLowImportanceMemories(threshold: number = 0.4, maxAge: number = 90): Promise<number> {
+    try {
+      // Validate inputs
+      if (threshold < 0 || threshold > 1) {
+        console.warn(`[Memory] Invalid threshold ${threshold}, using default 0.4`);
+        threshold = 0.4;
+      }
+      
+      if (maxAge <= 0) {
+        console.warn(`[Memory] Invalid maxAge ${maxAge}, using default 90`);
+        maxAge = 90;
+      }
+      
     // Delete low-importance memories older than maxAge days
     const cutoff = new Date(Date.now() - maxAge * 24 * 60 * 60 * 1000);
     const result = await db.memory.deleteMany({
@@ -327,7 +440,16 @@ class MemoryEngine {
         createdAt: { lt: cutoff }
       }
     });
+      
+      if (result.count > 0) {
+        console.log(`[Memory] Pruned ${result.count} low-importance memories (threshold: ${threshold}, maxAge: ${maxAge} days)`);
+      }
+      
     return result.count;
+    } catch (error) {
+      console.error('[Memory] Error pruning low-importance memories:', error);
+      return 0;
+    }
   }
 }
 

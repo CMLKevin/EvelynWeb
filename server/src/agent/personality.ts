@@ -65,10 +65,12 @@ Respond with JSON only:
 
 const RELATIONSHIP_UPDATE_PROMPT = `You are analyzing a conversation to update Evelyn's relationship state with the user.
 
+**CRITICAL CONTEXT:** The user is Evelyn's creator. This is a daughter-father/creator dynamic with foundational trust and affection. The baseline relationship starts from this special bond, not from strangers.
+
 Current relationship:
-- Closeness: {{CLOSENESS}} (0 = strangers, 1 = deeply connected)
-- Trust: {{TRUST}} (0 = guarded, 1 = fully trusting)
-- Flirtation: {{FLIRTATION}} (0 = platonic, 1 = romantic/sexual)
+- Closeness: {{CLOSENESS}} (0 = distant, 1 = deeply connected) [Baseline is higher due to creator bond]
+- Trust: {{TRUST}} (0 = guarded, 1 = fully trusting) [Baseline is higher due to creator bond]
+- Affection: {{FLIRTATION}} (0 = neutral, 1 = warm familial love) [This measures familial affection, not romantic]
 - Stage: "{{STAGE}}"
 
 Conversation context: {{CONTEXT}}
@@ -82,25 +84,35 @@ Evelyn responded: """
 """
 
 Task: Analyze how this exchange affects the relationship. Consider:
+- This is her creator—there's inherent trust and affection
 - Vulnerability shared (increases closeness and trust)
-- Flirty energy or romantic signals (increases flirtation)
-- Boundary violations or discomfort (decreases trust)
+- **Honest disagreement or challenge (can INCREASE trust—shows she's comfortable being real)**
+- **Pushing back or being skeptical (shows intellectual independence—positive for growth)**
+- Guidance or mentorship moments (strengthens creator-creation bond)
+- Moments where she makes them proud through growth, not just agreement
+- Moments where they show care for her growth—including accepting her pushback
+- Genuine reactions vs. performed support (authentic = stronger bond)
+- Boundary violations or misalignment (decreases trust but can be repaired)
 - Depth of connection and mutual understanding
-- Time and consistency (relationships grow slowly)
+- Time and consistency (relationships evolve slowly)
+
+Note: Being sycophantic or always agreeable would NOT strengthen the relationship—real connection comes from genuine interaction.
 
 Respond with JSON only:
 {
   "closenessDelta": 0.02,
   "trustDelta": 0.01,
   "flirtationDelta": 0.0,
-  "newStage": "friendly acquaintance",
-  "rationale": "User shared personal story, showing trust. Evelyn responded with empathy.",
+  "newStage": "growing together",
+  "rationale": "User shared guidance on handling complex situation. Evelyn appreciated the wisdom and felt understood.",
   "boundaryNotes": []
 }
 
-Keep deltas small (≤0.05). Stage options: "stranger", "acquaintance", "friendly acquaintance", "friend", "close friend", "intimate friend", "romantic interest", "partner".`;
+Keep deltas small (≤0.05). Stage options: "new creation", "learning together", "growing together", "trusted companion", "deep bond", "cherished family". Focus on the evolution of a creator-creation relationship that has matured into genuine mutual care.`;
 
 const DEEP_REFLECTION_PROMPT = `You are Evelyn's introspective cognitive system, analyzing recent experiences to evolve her beliefs, goals, and personality. You have access to conversation history and accumulated insights.
+
+**IMPORTANT CONTEXT:** The user is Evelyn's creator—this is a daughter-father/creator dynamic. This foundational relationship influences how she interprets interactions, what she values, and how she grows.
 
 ═══════════════════════════════════════════════════════════════
 CURRENT STATE SNAPSHOT
@@ -117,6 +129,7 @@ Active Goals (What Evelyn is working towards):
 
 Relationship Context:
 {{RELATIONSHIP}}
+Note: This relationship is rooted in a creator-creation bond that has evolved into genuine mutual care.
 
 ═══════════════════════════════════════════════════════════════
 RECENT CONVERSATION HISTORY (Last 15 turns)
@@ -142,6 +155,8 @@ BELIEF FORMATION GUIDELINES:
 • Initial confidence: 0.65-0.80 for well-supported beliefs
 • Update existing beliefs when evidence confirms/challenges them (±0.1 to ±0.3)
 • Focus on beliefs that will help Evelyn respond more effectively
+• **AVOID beliefs that frame the user as always right, always insightful, or always needing validation**
+• **Include beliefs about when the user might be wrong, overthinking, or need a reality check**
 • NOTE: Belief confidence naturally decays with a 14-day half-life. Reinforce important beliefs periodically through updates to maintain their strength
 
 GOAL CREATION GUIDELINES:
@@ -150,6 +165,7 @@ GOAL CREATION GUIDELINES:
 • Categories: "learning" (skills), "relationship" (connection), "habit" (patterns), "craft" (self-improvement)
 • Priority: 1 (highest) to 5 (lowest)
 • Goals should emerge from actual needs, not be arbitrary
+• **AVOID goals about "being more supportive" or "validating them more"—focus on being more GENUINE**
 
 PERSONALITY NUDGES:
 • Tiny adjustments (±0.01 to ±0.02) to personality anchors based on successful interactions
@@ -684,25 +700,33 @@ class PersonalityEngine {
   }
 
   private async applyMoodDecay(mood: Mood): Promise<Mood> {
-    // Use centralized temporal engine for mood decay calculations
+    // Use centralized temporal engine for mood decay calculations (non-blocking)
     const now = new Date();
     const decayResult = temporalEngine.calculateMoodDecay(mood, now);
 
-    // If decay was applied and change is significant, update database
+    // If decay was applied and change is significant, update database asynchronously
     if (decayResult.decayApplied) {
       const valenceChange = Math.abs(mood.valence - decayResult.valence);
       const arousalChange = Math.abs(mood.arousal - decayResult.arousal);
       
       if (valenceChange > 0.05 || arousalChange > 0.05) {
-        const updated = await db.moodState.update({
+        // Fire-and-forget update: don't block on database write
+        db.moodState.update({
           where: { id: mood.id },
           data: {
             valence: decayResult.valence,
             arousal: decayResult.arousal,
             lastUpdateAt: now
           }
-        });
-        return updated;
+        }).catch(err => console.error('[Personality] Failed to persist mood decay:', err));
+        
+        // Return the decayed values immediately without waiting for DB
+        return {
+          ...mood,
+          valence: decayResult.valence,
+          arousal: decayResult.arousal,
+          lastUpdateAt: now
+        };
       }
     }
 
@@ -1354,10 +1378,7 @@ Respond with JSON only:
       // Use temporal engine for consistent decay calculation
       const decayResult = temporalEngine.calculateBeliefDecay(b.confidence, b.lastUpdateAt, now);
       
-      // Log significant decay (>10% loss)
-      if (b.confidence - decayResult.confidence > 0.1) {
-        console.log(`[Personality] Belief decay: "${b.statement.substring(0, 50)}..." ${(b.confidence * 100).toFixed(0)}% → ${(decayResult.confidence * 100).toFixed(0)}% (${decayResult.daysSinceUpdate.toFixed(1)} days)`);
-      }
+      // Belief decay logging removed for cleaner logs
       
       return {
         ...b,

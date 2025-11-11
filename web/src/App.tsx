@@ -1,96 +1,136 @@
-import { useEffect, useState } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { useStore } from './state/store';
 import { wsClient } from './lib/ws';
-import { localStorageManager } from './lib/localStorage';
-import Sidebar from './components/sidebar/Sidebar';
+import TerminalLayout from './components/terminal/TerminalLayout';
 import ChatWindow from './components/chat/ChatWindow';
-import DiagnosticsPanel from './components/panels/DiagnosticsPanel';
+import ThinkingPanel from './components/panels/ThinkingPanel';
+
+// Lazy load heavy components for code splitting
+const DiagnosticsPanel = lazy(() => import('./components/panels/DiagnosticsPanel'));
+const LogsPanel = lazy(() => import('./components/logs/LogsPanel'));
+const CommandPalette = lazy(() => import('./components/terminal/CommandPalette'));
+const QuickSearch = lazy(() => import('./components/terminal/QuickSearch'));
 
 export default function App() {
-  const { showDiagnostics, loadMessages, loadSearchResults, syncWithLocalStorage, saveToLocalStorage } = useStore();
-  const [syncStatus, setSyncStatus] = useState<string>('');
+  const { 
+    loadMessages, 
+    loadSearchResults, 
+    loadActivities, 
+    loadPersona,
+    uiState,
+    setCommandPaletteOpen,
+    setQuickSearchOpen,
+  } = useStore();
 
   useEffect(() => {
-    // Perform startup sync
+    // Load data from server on connect
     const initializeApp = async () => {
-      setSyncStatus('Syncing data...');
-      
       try {
-        // Sync LocalStorage with Server
-        const syncResult = await syncWithLocalStorage();
-        console.log('[App] Sync result:', syncResult);
+        await Promise.all([
+          loadMessages(),
+          loadSearchResults(),
+          loadActivities(),
+          loadPersona()
+        ]);
         
-        if (syncResult) {
-          setSyncStatus(`Synced: ${syncResult.action}`);
-          setTimeout(() => setSyncStatus(''), 5000);
-        }
-        
-        // Load all data
-        await loadMessages();
-        await loadSearchResults();
-        
-        // Start auto-save to LocalStorage
-        localStorageManager.startAutoSave(() => {
-          const state = useStore.getState();
-          return {
-            messages: state.messages,
-            searchResults: state.searchResults,
-            personality: state.personality,
-            activities: state.activities
-          };
-        });
-        
+        console.log('[App] All data loaded from server');
       } catch (error) {
         console.error('[App] Initialization error:', error);
-        setSyncStatus('Sync failed, using server data');
       }
     };
     
+    // Connect to WebSocket first, then load data
+    wsClient.connect();
     initializeApp();
     
-    // Connect to WebSocket
-    wsClient.connect();
-    
+    // Don't disconnect on cleanup - let the wsClient manage its lifecycle
+    // This prevents issues with React Strict Mode double-mounting
+    // The socket will persist across remounts and only disconnect when truly needed
     return () => {
-      wsClient.disconnect();
-      localStorageManager.stopAutoSave();
+      // Cleanup is handled by the wsClient itself
     };
   }, []);
 
-  return (
-    <div className="relative flex h-screen overflow-hidden">
-      {/* Sync Status Toast */}
-      {syncStatus && (
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 animate-fade-in">
-          <div className="glass-strong px-6 py-3 rounded-2xl shadow-float border border-purple-500/30">
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse" />
-              <span className="text-sm text-white font-medium">{syncStatus}</span>
-            </div>
-          </div>
-        </div>
-      )}
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Command Palette: Ctrl/Cmd + K
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
+      }
 
-      {/* Animated background particles */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute w-96 h-96 bg-purple-500/10 rounded-full blur-3xl top-20 left-20 animate-float" style={{ animationDelay: '0s' }} />
-        <div className="absolute w-96 h-96 bg-pink-500/10 rounded-full blur-3xl bottom-20 right-20 animate-float" style={{ animationDelay: '2s' }} />
-        <div className="absolute w-64 h-64 bg-blue-500/10 rounded-full blur-3xl top-1/2 left-1/2 animate-float" style={{ animationDelay: '4s' }} />
-      </div>
+      // Quick Search: Ctrl/Cmd + F
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        setQuickSearchOpen(true);
+      }
 
-      {/* Main content */}
-      <div className="relative z-10 flex flex-1 gap-4 p-4 min-w-0">
-        <Sidebar />
-        <div className="flex-1 min-w-[400px] max-w-full">
-          <ChatWindow />
-        </div>
-        {showDiagnostics && (
-          <div className="flex-shrink-0">
-            <DiagnosticsPanel />
-          </div>
-        )}
+      // Close modals: Escape
+      if (e.key === 'Escape') {
+        setCommandPaletteOpen(false);
+        setQuickSearchOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Loading fallback component
+  const LoadingFallback = () => (
+    <div className="flex items-center justify-center h-full">
+      <div className="text-cyan-400 monospace text-sm animate-pulse">
+        Loading...
       </div>
     </div>
   );
-}
 
+  const renderContent = () => {
+    switch (uiState.activeTab) {
+      case 'chat':
+        return (
+          <div className="flex h-full gap-4 p-4">
+            <ThinkingPanel />
+            <div className="flex-1">
+              <ChatWindow />
+            </div>
+          </div>
+        );
+      case 'logs':
+        return (
+          <Suspense fallback={<LoadingFallback />}>
+            <LogsPanel />
+          </Suspense>
+        );
+      case 'diagnostics':
+        return (
+          <Suspense fallback={<LoadingFallback />}>
+              <DiagnosticsPanel />
+          </Suspense>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <>
+      <TerminalLayout>
+        {renderContent()}
+      </TerminalLayout>
+
+      {/* Global Modals - lazy loaded */}
+      {uiState.commandPaletteOpen && (
+        <Suspense fallback={null}>
+          <CommandPalette />
+        </Suspense>
+      )}
+      {uiState.quickSearchOpen && (
+        <Suspense fallback={null}>
+          <QuickSearch />
+        </Suspense>
+      )}
+    </>
+  );
+}

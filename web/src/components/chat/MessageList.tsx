@@ -1,59 +1,101 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useStore } from '../../state/store';
 import SearchResultBubble from './SearchResultBubble';
 import MarkdownRenderer from '../common/MarkdownRenderer';
 import TruncationIndicator from './TruncationIndicator';
+import AgentSessionInline from '../agent/AgentSessionInline';
+import AgentBrowsingResults from '../agent/AgentBrowsingResults';
+import { Trash2, User, Bot, Copy, Check } from 'lucide-react';
 
 export default function MessageList() {
-  const { messages, currentMessage, searchResults } = useStore();
+  // Optimize store selectors - only subscribe to what we need
+  const messages = useStore(state => state.messages);
+  const currentMessage = useStore(state => state.currentMessage);
+  const searchResults = useStore(state => state.searchResults);
+  const agentSession = useStore(state => state.agentSession);
+  const browsingResults = useStore(state => state.browsingResults);
+  const deleteMessage = useStore(state => state.deleteMessage);
+  
+  const [deletingMessageId, setDeletingMessageId] = useState<number | null>(null);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Optimize auto-scroll - only track essential changes
+  const messagesLength = useStore(state => state.messages.length);
+  const hasCurrentMessage = useStore(state => !!state.currentMessage);
+  const searchResultsLength = useStore(state => state.searchResults.length);
+  const agentPagesLength = useStore(state => state.agentSession.pages.length);
+  const browsingResultsLength = useStore(state => state.browsingResults.length);
+
+  // Auto-scroll to bottom when content changes
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, currentMessage]);
+  }, [messagesLength, hasCurrentMessage, searchResultsLength, agentPagesLength, browsingResultsLength]);
 
-  const formatTime = (timestamp: string) => {
+  const formatTime = useCallback((timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString('en-US', {
-      hour: 'numeric',
+      hour12: false,
+      hour: '2-digit',
       minute: '2-digit',
-      hour12: true
+      second: '2-digit'
     });
-  };
+  }, []);
+
+  const handleDeleteMessage = useCallback(async (messageId: number) => {
+    if (!confirm('Delete this message? This action cannot be undone.')) {
+      return;
+    }
+    
+    setDeletingMessageId(messageId);
+    try {
+      await deleteMessage(messageId);
+    } catch (error) {
+      console.error('Failed to delete message:', error);
+      alert('Failed to delete message. Please try again.');
+    } finally {
+      setDeletingMessageId(null);
+    }
+  }, [deleteMessage]);
+
+  const handleCopy = useCallback((content: string, id: number) => {
+    navigator.clipboard.writeText(content);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  }, []);
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
+    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2 terminal-scrollbar">
       {messages.length === 0 && !currentMessage && (
-        <div className="flex flex-col items-center justify-center h-full animate-fade-in">
-          <div className="relative mb-8">
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full blur-2xl opacity-50 animate-glow-pulse" />
-            <div className="relative w-24 h-24 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-5xl font-bold shadow-2xl ring-4 ring-white/10 animate-float">
-              E
-            </div>
+        <div className="flex flex-col items-center justify-center h-full animate-fade-in text-center">
+          <div className="mb-6 text-cyan-400">
+            <Bot className="w-20 h-20 mx-auto mb-4 terminal-glow-strong" />
           </div>
           
-          <h2 className="text-4xl font-bold mb-3 text-gradient-purple">
-            Welcome to Evelyn
+          <h2 className="text-2xl font-bold mb-3 text-cyan-400 terminal-glow monospace">
+            EVELYN TERMINAL v2.0
           </h2>
-          <p className="text-gray-400 text-center max-w-md leading-relaxed mb-6">
-            Your evolving AI companion who remembers, thinks, and grows with you.
-            <br />
-            <span className="text-white mt-2 inline-block">Start a conversation!</span>
+          <p className="text-gray-400 max-w-md leading-relaxed mb-6 monospace">
+            An evolving AI companion with persistent memory, personality, and deep reflection capabilities.
           </p>
           
-          <div className="flex gap-3 flex-wrap justify-center">
-            <div className="glass-purple rounded-2xl px-5 py-3 shadow-lg hover:scale-105 transition-transform cursor-pointer">
-              <span className="text-lg mr-2">💭</span>
-              <span className="text-sm text-white/90">Deep thoughts</span>
+          <div className="flex gap-3 flex-wrap justify-center monospace text-sm">
+            <div className="terminal-panel px-4 py-2">
+              <span className="text-purple-400">💭</span>
+              <span className="ml-2 text-white">Inner Thoughts</span>
             </div>
-            <div className="glass-purple rounded-2xl px-5 py-3 shadow-lg hover:scale-105 transition-transform cursor-pointer">
-              <span className="text-lg mr-2">🧠</span>
-              <span className="text-sm text-white/90">True memory</span>
+            <div className="terminal-panel px-4 py-2">
+              <span className="text-green-400">🧠</span>
+              <span className="ml-2 text-white">True Memory</span>
             </div>
-            <div className="glass-purple rounded-2xl px-5 py-3 shadow-lg hover:scale-105 transition-transform cursor-pointer">
-              <span className="text-lg mr-2">✨</span>
-              <span className="text-sm text-white/90">Evolves daily</span>
+            <div className="terminal-panel px-4 py-2">
+              <span className="text-cyan-400">✨</span>
+              <span className="ml-2 text-white">Evolves Over Time</span>
             </div>
+          </div>
+
+          <div className="mt-8 text-xs text-gray-600 monospace">
+            <p>Type a message below to begin...</p>
           </div>
         </div>
       )}
@@ -61,184 +103,205 @@ export default function MessageList() {
       {/* Truncation Indicator - shows when context has been optimized */}
       {messages.length > 0 && <TruncationIndicator />}
 
-      {/* Render messages and search results interleaved by timestamp */}
-      {messages.map((msg, index) => {
-        const isUser = msg.role === 'user';
-        
-        // Check if there are any search results that should appear after this message
-        const relevantSearchResults = searchResults.filter(sr => {
-          // Show search results between this message and the next one
-          const msgTime = new Date(msg.createdAt).getTime();
-          const nextMsg = messages[index + 1];
-          const nextMsgTime = nextMsg ? new Date(nextMsg.createdAt).getTime() : Date.now() + 1000000;
-          const srTime = new Date(sr.timestamp).getTime();
-          return srTime > msgTime && srTime < nextMsgTime;
+      {/* Render messages */}
+      {(() => {
+        // Filter messages first
+        const filteredMessages = messages.filter(msg => {
+          // Filter out browsing trigger messages
+          if (msg.auxiliary) {
+            try {
+              const aux = typeof msg.auxiliary === 'string' ? JSON.parse(msg.auxiliary) : msg.auxiliary;
+              if (aux.type === 'browsing_trigger') {
+                return false;
+              }
+            } catch (e) {
+              // If parsing fails, show the message
+            }
+          }
+          return true;
         });
-        const isFirstInGroup = index === 0 || messages[index - 1].role !== msg.role;
 
-        return (
-          <div key={`msg-group-${msg.id}`}>
-            <div
-              className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'} ${
-                isFirstInGroup ? 'mt-6' : 'mt-1'
-              } animate-slide-in-${isUser ? 'right' : 'left'}`}
-            >
-            {/* Avatar - only for first message in group */}
-            {!isUser && isFirstInGroup && (
-              <div className="flex-shrink-0">
-                <div className="relative group">
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full blur-md group-hover:blur-lg transition-all" />
-                  <div className="relative w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-sm font-bold ring-2 ring-white/10 shadow-lg">
-                    E
+        return filteredMessages.map((msg, index) => {
+          const isUser = msg.role === 'user';
+          
+          // Check if there are any search results that should appear after this message
+          const relevantSearchResults = searchResults.filter(sr => {
+            const msgTime = new Date(msg.createdAt).getTime();
+            const nextMsg = filteredMessages[index + 1];
+            const nextMsgTime = nextMsg ? new Date(nextMsg.createdAt).getTime() : Date.now() + 1000000;
+            const srTime = new Date(sr.timestamp).getTime();
+            return srTime > msgTime && srTime < nextMsgTime;
+          });
+
+          return (
+            <div key={`msg-group-${msg.id}`}>
+              {/* Terminal Prompt Style Message */}
+              <div className={`terminal-prompt ${isUser ? 'terminal-prompt-user' : 'terminal-prompt-assistant'} group`}>
+                <div className="flex items-start gap-3 w-full">
+                  {/* Prompt Symbol */}
+                  <div className="flex-shrink-0 flex items-center gap-2">
+                    {isUser ? (
+                      <>
+                        <User className="w-5 h-5 text-green-400" />
+                        <span className="terminal-prompt-symbol text-green-400 terminal-glow">$</span>
+                      </>
+                    ) : (
+                      <>
+                        <Bot className="w-5 h-5 text-purple-400" />
+                        <span className="terminal-prompt-symbol text-purple-400 terminal-glow tracking-wide">Evelyn</span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Message Content */}
+                  <div className="flex-1 min-w-0">
+                    {/* Metadata */}
+                    <div className="flex items-center gap-3 mb-1 text-xs text-gray-500 monospace">
+                      <span>{isUser ? 'user' : 'assistant'}</span>
+                      <span>{formatTime(msg.createdAt)}</span>
+                      
+                      {/* Actions (visible on hover) */}
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => handleCopy(msg.content, msg.id)}
+                          className="text-cyan-400 hover:text-cyan-300 transition-colors"
+                          title="Copy message"
+                        >
+                          {copiedId === msg.id ? (
+                            <Check className="w-3 h-3" />
+                          ) : (
+                            <Copy className="w-3 h-3" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteMessage(msg.id)}
+                          disabled={deletingMessageId === msg.id}
+                          className="text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
+                          title="Delete message"
+                        >
+                          {deletingMessageId === msg.id ? (
+                            <span className="text-xs animate-spin">⏳</span>
+                          ) : (
+                            <Trash2 className="w-3 h-3" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Message Text */}
+                    <div className="terminal-prompt-content text-gray-200 monospace text-sm leading-relaxed">
+                      {isUser ? (
+                        <span className="whitespace-pre-wrap break-words">{msg.content}</span>
+                      ) : (
+                        <MarkdownRenderer content={msg.content} />
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            )}
-            
-            {/* Spacer for non-first messages */}
-            {!isUser && !isFirstInGroup && <div className="w-10 flex-shrink-0" />}
 
-            {/* Message Bubble */}
-            <div className={`relative max-w-[70%] min-w-0 ${isUser ? 'ml-auto' : ''}`}>
-              {/* Name and timestamp - only for first in group */}
-              {isFirstInGroup && (
-                <div className={`flex items-center gap-2 mb-1 px-2 ${isUser ? 'justify-end' : 'justify-start'}`}>
-                  <span className={`text-xs font-semibold ${
-                    isUser ? 'text-blue-400' : 'text-gradient-purple'
-                  }`}>
-                    {isUser ? 'You' : 'Evelyn'}
-                  </span>
-                  {!isUser && (
-                    <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 text-[9px] font-bold rounded uppercase tracking-wide">
-                      AI
-                    </span>
-                  )}
-                  <span className="text-[10px] text-gray-500">
-                    {formatTime(msg.createdAt)}
-                  </span>
-                </div>
-              )}
+              {/* Render search results that belong after this message */}
+              {relevantSearchResults.map((sr) => (
+                <SearchResultBubble key={sr.id} {...sr} />
+              ))}
 
-              {/* Speech Bubble */}
-              <div className={`relative group ${isUser ? 'glass-blue' : 'glass-purple'} rounded-3xl px-5 py-3 shadow-lg hover:shadow-xl transition-all overflow-hidden`}>
-                {/* Bubble tail - only for first in group */}
-                {isFirstInGroup && (
-                  <div className={`absolute ${
-                    isUser 
-                      ? 'right-0 -mr-2 top-3' 
-                      : 'left-0 -ml-2 top-3'
-                  }`}>
-                    <svg width="12" height="20" viewBox="0 0 12 20">
-                      <path
-                        d={isUser 
-                          ? "M 0 0 Q 12 10 0 20" 
-                          : "M 12 0 Q 0 10 12 20"
-                        }
-                        fill={isUser 
-                          ? 'rgba(59, 130, 246, 0.1)' 
-                          : 'rgba(168, 85, 247, 0.1)'
-                        }
-                        className="backdrop-blur-sm"
-                      />
-                    </svg>
-                  </div>
-                )}
+              {/* Render browsing results that belong after this message */}
+              {browsingResults.filter(br => {
+                const msgTime = new Date(msg.createdAt).getTime();
+                const nextMsg = filteredMessages[index + 1];
+                const nextMsgTime = nextMsg ? new Date(nextMsg.createdAt).getTime() : Date.now() + 1000000;
+                const brTime = new Date(br.timestamp).getTime();
+                return brTime > msgTime && brTime < nextMsgTime;
+              }).map((br) => (
+                <AgentBrowsingResults key={br.sessionId} {...br} />
+              ))}
 
-                {/* Message content with markdown support */}
-                <div className={`text-[15px] leading-relaxed break-words overflow-hidden ${
-                  isUser ? 'text-white' : 'text-white'
-                }`} style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
-                  {isUser ? (
-                    // User messages: plain text (no markdown)
-                    <span className="whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{msg.content}</span>
-                  ) : (
-                    // Evelyn's messages: render markdown
-                    <MarkdownRenderer content={msg.content} />
-                  )}
-                </div>
-
-                {/* Hover overlay with actions */}
-                <div className="absolute -top-8 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                  <button className="glass-dark w-7 h-7 rounded-lg flex items-center justify-center hover:scale-110 transition-transform">
-                    <span className="text-xs">❤️</span>
-                  </button>
-                  <button className="glass-dark w-7 h-7 rounded-lg flex items-center justify-center hover:scale-110 transition-transform">
-                    <span className="text-xs">⋯</span>
-                  </button>
-                </div>
-              </div>
+              {/* Render inline agent session if it belongs in the timeline */}
+              {agentSession.sessionId && (() => {
+                const msgTime = new Date(msg.createdAt).getTime();
+                const nextMsg = filteredMessages[index + 1];
+                const nextMsgTime = nextMsg ? new Date(nextMsg.createdAt).getTime() : Date.now() + 1000000;
+                const sessionTime = agentSession.startedAt ? new Date(agentSession.startedAt).getTime() : Date.now();
+                
+                if (sessionTime > msgTime && sessionTime < nextMsgTime) {
+                  return (
+                    <AgentSessionInline
+                      key={agentSession.sessionId}
+                      sessionId={agentSession.sessionId}
+                      query={agentSession.query || ''}
+                      evelynIntent={agentSession.evelynIntent}
+                      entryUrl={agentSession.entryUrl}
+                      isActive={agentSession.isActive}
+                      approved={agentSession.approved}
+                      currentStep={agentSession.currentStep}
+                      currentDetail={agentSession.currentDetail}
+                      pages={agentSession.pages}
+                      pageCount={agentSession.pageCount}
+                      maxPages={agentSession.maxPages}
+                      error={agentSession.error}
+                      summary={agentSession.summary}
+                      startedAt={agentSession.startedAt}
+                    />
+                  );
+                }
+                return null;
+              })()}
             </div>
-
-            {/* Avatar for user - only for first message in group */}
-            {isUser && isFirstInGroup && (
-              <div className="flex-shrink-0">
-                <div className="relative group">
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full blur-md group-hover:blur-lg transition-all" />
-                  <div className="relative w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-cyan-400 flex items-center justify-center text-sm font-bold ring-2 ring-white/10 shadow-lg">
-                    U
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Spacer for non-first user messages */}
-            {isUser && !isFirstInGroup && <div className="w-10 flex-shrink-0" />}
-            </div>
-            
-            {/* Render search results that belong after this message */}
-            {relevantSearchResults.map((sr) => (
-              <SearchResultBubble key={sr.id} {...sr} />
-            ))}
-          </div>
-        );
-      })}
+          );
+        });
+      })()}
 
       {/* Typing indicator */}
       {currentMessage && (
-        <div className="flex gap-3 justify-start animate-slide-in-left">
-          <div className="flex-shrink-0">
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full blur-md animate-glow-pulse" />
-              <div className="relative w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-sm font-bold ring-2 ring-white/10 shadow-lg">
-                E
-              </div>
-            </div>
-          </div>
-
-          <div className="relative max-w-[70%] min-w-0">
-            <div className="flex items-center gap-2 mb-1 px-2">
-              <span className="text-xs font-semibold text-gradient-purple">Evelyn</span>
-              <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 text-[9px] font-bold rounded uppercase tracking-wide">
-                AI
-              </span>
-              <span className="text-[10px] text-purple-400 flex items-center gap-1">
-                <div className="flex gap-0.5">
-                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                </div>
-                typing...
-              </span>
+        <div className="terminal-prompt terminal-prompt-assistant animate-fade-in">
+          <div className="flex items-start gap-3 w-full">
+            <div className="flex-shrink-0 flex items-center gap-2">
+              <Bot className="w-5 h-5 text-purple-400" />
+              <span className="terminal-prompt-symbol text-purple-400 terminal-glow">evelyn@host:</span>
             </div>
 
-            <div className="relative glass-purple rounded-3xl px-5 py-3 shadow-lg overflow-hidden">
-              <div className="absolute left-0 -ml-2 top-3">
-                <svg width="12" height="20" viewBox="0 0 12 20">
-                  <path
-                    d="M 12 0 Q 0 10 12 20"
-                    fill="rgba(168, 85, 247, 0.1)"
-                    className="backdrop-blur-sm"
-                  />
-                </svg>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-1 text-xs text-gray-500 monospace">
+                <span>assistant</span>
+                <span className="flex items-center gap-1">
+                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                  <span className="ml-1">typing</span>
+                </span>
               </div>
 
-              <div className="text-[15px] leading-relaxed text-white break-words overflow-hidden" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+              <div className="terminal-prompt-content text-gray-200 monospace text-sm leading-relaxed">
                 <MarkdownRenderer content={currentMessage} />
-                <span className="inline-block w-0.5 h-4 bg-purple-400 ml-1 animate-pulse" />
+                <span className="typing-cursor"></span>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Show agent session at end if it hasn't been placed in timeline yet */}
+      {agentSession.sessionId && !messages.some(msg => {
+        const msgTime = new Date(msg.createdAt).getTime();
+        const sessionTime = agentSession.startedAt ? new Date(agentSession.startedAt).getTime() : Date.now();
+        return sessionTime > msgTime;
+      }) && (
+        <AgentSessionInline
+          sessionId={agentSession.sessionId}
+          query={agentSession.query || ''}
+          evelynIntent={agentSession.evelynIntent}
+          entryUrl={agentSession.entryUrl}
+          isActive={agentSession.isActive}
+          approved={agentSession.approved}
+          currentStep={agentSession.currentStep}
+          currentDetail={agentSession.currentDetail}
+          pages={agentSession.pages}
+          pageCount={agentSession.pageCount}
+          maxPages={agentSession.maxPages}
+          error={agentSession.error}
+          summary={agentSession.summary}
+          startedAt={agentSession.startedAt}
+        />
       )}
 
       <div ref={bottomRef} className="h-4" />

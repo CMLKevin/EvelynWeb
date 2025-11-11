@@ -525,100 +525,123 @@ export async function analyzeMemoryRecency(now: Date = new Date()): Promise<Temp
 }
 
 // ============================================================================
+// BACKGROUND PROCESSING
+// ============================================================================
+
+let temporalUpdateInterval: NodeJS.Timeout | null = null;
+let lastBackgroundUpdate = 0;
+const BACKGROUND_UPDATE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Start background temporal calculations (non-blocking)
+ * Runs every 5 minutes to update time-dependent values without impacting request performance
+ */
+export function startBackgroundTemporalUpdates(): void {
+  if (temporalUpdateInterval) {
+    clearInterval(temporalUpdateInterval);
+  }
+  
+  temporalUpdateInterval = setInterval(async () => {
+    try {
+      const now = new Date();
+      const startTime = Date.now();
+      
+      // Run all temporal calculations in parallel
+      Promise.all([
+        applyMoodDecay(now).catch(err => ({ system: 'mood', calculated: false, updated: false, error: err })),
+        calculateAllBeliefDecay(now).catch(err => ({ system: 'beliefs', calculated: false, updated: false, error: err })),
+        analyzeMemoryRecency(now).catch(err => ({ system: 'memory', calculated: false, updated: false, error: err }))
+      ]).then(results => {
+        const elapsedMs = Date.now() - startTime;
+        const updateCount = results.filter(r => r.updated).length;
+        const calculatedCount = results.filter(r => r.calculated).length;
+        const errorCount = results.filter(r => (r as any).error).length;
+        
+        // Single summary log entry with all key metrics
+        if (updateCount > 0 || errorCount > 0) {
+          const parts = [
+            `⏰ Cycle complete in ${elapsedMs}ms`,
+            `calculated: ${calculatedCount}/3`,
+            updateCount > 0 ? `updated: ${updateCount}` : null,
+            errorCount > 0 ? `errors: ${errorCount}` : null
+          ].filter(Boolean);
+          console.log(`[Temporal] ${parts.join(' | ')}`);
+          
+          // Log individual errors if any occurred
+          results.forEach(r => {
+            if ((r as any).error) {
+              console.error(`[Temporal] ${r.system} error:`, (r as any).error.message || (r as any).error);
+            }
+          });
+        }
+      }).catch(err => {
+        console.error('[Temporal] Unexpected error in background cycle:', err.message || err);
+      });
+      
+      lastBackgroundUpdate = Date.now();
+    } catch (error) {
+      console.error('[Temporal] Critical error in background update:', error);
+    }
+  }, BACKGROUND_UPDATE_INTERVAL_MS);
+}
+
+/**
+ * Stop background temporal updates
+ */
+export function stopBackgroundTemporalUpdates(): void {
+  if (temporalUpdateInterval) {
+    clearInterval(temporalUpdateInterval);
+    temporalUpdateInterval = null;
+  }
+}
+
+// ============================================================================
 // SYSTEM INITIALIZATION
 // ============================================================================
 
 /**
- * Initialize all temporal systems on server startup
+ * Initialize all temporal systems on server startup (OPTIMIZED FOR SPEED)
  * This ensures all time-dependent values are correctly calculated based on system clock
+ * Runs calculations in parallel to minimize startup time
  */
 export async function initializeTemporalSystems(): Promise<void> {
-  console.log('\n╔════════════════════════════════════════════════════════════════╗');
-  console.log('║        🕐 TEMPORAL ENGINE - System Clock Initialization       ║');
-  console.log('╚════════════════════════════════════════════════════════════════╝\n');
-  
   const startTime = Date.now();
   const now = new Date();
   
-  console.log(`[Temporal] System time: ${now.toISOString()}`);
-  console.log(`[Temporal] Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
-  console.log('');
-  
-  // Record startup event and get downtime information
-  console.log('[Temporal] Recording startup event...');
+  // Get downtime info and record startup in parallel (non-blocking)
   const downtimeInfo = await getDowntimeInfo();
-  await recordLifecycleEvent('startup');
+  recordLifecycleEvent('startup').catch(err => 
+    console.error('[Temporal] Failed to record startup event:', err)
+  );
   
-  if (downtimeInfo.hadDowntime) {
-    console.log(`  ⏱️  Server was down for: ${downtimeInfo.downtimeFormatted}`);
-    console.log(`  📅 Last shutdown: ${downtimeInfo.lastShutdown?.toISOString()}`);
-    console.log(`  🚀 Current startup: ${downtimeInfo.currentStartup.toISOString()}`);
-    console.log(`  ⚠️  Calculating decay for ${Math.floor(downtimeInfo.downtimeSeconds / 60)} minutes of downtime...`);
-  } else {
-    console.log(`  ℹ️  ${downtimeInfo.downtimeFormatted}`);
-  }
-  console.log('');
+  // Run ALL temporal calculations in PARALLEL for maximum speed
+  const [moodResult, beliefResult, memoryResult] = await Promise.all([
+    applyMoodDecay(now),
+    calculateAllBeliefDecay(now),
+    analyzeMemoryRecency(now)
+  ]);
   
-  const results: TemporalCalculationResult[] = [];
-  
-  // 1. Apply mood decay
-  console.log('[Temporal] Calculating mood decay...');
-  const moodResult = await applyMoodDecay(now);
-  results.push(moodResult);
-  
-  if (moodResult.calculated) {
-    if (moodResult.updated) {
-      console.log(`  ✓ ${moodResult.message}`);
-      console.log(`    Elapsed: ${moodResult.elapsedTime}`);
-    } else {
-      console.log(`  ○ ${moodResult.message}`);
-    }
-  } else {
-    console.log(`  ✗ ${moodResult.message}`);
-  }
-  console.log('');
-  
-  // 2. Calculate belief decay (non-persisting)
-  console.log('[Temporal] Calculating belief decay...');
-  const beliefResult = await calculateAllBeliefDecay(now);
-  results.push(beliefResult);
-  
-  if (beliefResult.calculated) {
-    console.log(`  ✓ ${beliefResult.message}`);
-    if (beliefResult.after?.decayDetails && beliefResult.after.decayDetails.length > 0) {
-      console.log('  Top decayed beliefs:');
-      for (const detail of beliefResult.after.decayDetails) {
-        console.log(`    • "${detail.statement}" ${detail.original} → ${detail.current} (${detail.days} days)`);
-      }
-    }
-  } else {
-    console.log(`  ○ ${beliefResult.message}`);
-  }
-  console.log('');
-  
-  // 3. Analyze memory recency
-  console.log('[Temporal] Analyzing memory recency...');
-  const memoryResult = await analyzeMemoryRecency(now);
-  results.push(memoryResult);
-  
-  if (memoryResult.calculated) {
-    console.log(`  ✓ ${memoryResult.message}`);
-  } else {
-    console.log(`  ○ ${memoryResult.message}`);
-  }
-  console.log('');
-  
-  // Summary
+  // Single summary log with all key metrics
   const elapsedMs = Date.now() - startTime;
+  const results = [moodResult, beliefResult, memoryResult];
   const successCount = results.filter(r => r.calculated).length;
   const updateCount = results.filter(r => r.updated).length;
   
-  console.log('━'.repeat(66));
-  console.log(`[Temporal] Initialization complete in ${elapsedMs}ms`);
-  console.log(`[Temporal] Systems calculated: ${successCount}/${results.length}`);
-  console.log(`[Temporal] Values updated: ${updateCount}`);
-  console.log('━'.repeat(66));
-  console.log('');
+  const downtimePart = downtimeInfo.hadDowntime 
+    ? `downtime: ${Math.floor(downtimeInfo.downtimeSeconds / 60)}min`
+    : 'no downtime';
+  
+  console.log(
+    `[Temporal] 🕐 Initialized in ${elapsedMs}ms | ` +
+    `calculated: ${successCount}/3 | ` +
+    `updated: ${updateCount} | ` +
+    `${downtimePart} | ` +
+    `background: 5min cycles`
+  );
+  
+  // Start background updates for continuous optimization
+  startBackgroundTemporalUpdates();
+  lastBackgroundUpdate = Date.now();
 }
 
 /**
@@ -681,10 +704,11 @@ export async function getTemporalStatus(): Promise<{
  */
 export async function recordShutdown(uptimeSeconds: number): Promise<void> {
   try {
+    stopBackgroundTemporalUpdates();
     await recordLifecycleEvent('shutdown', uptimeSeconds);
-    console.log(`[Temporal] Shutdown event recorded (uptime: ${Math.floor(uptimeSeconds / 60)} minutes)`);
+    console.log(`[Temporal] 🛑 Shutdown complete | uptime: ${Math.floor(uptimeSeconds / 60)}min`);
   } catch (error) {
-    console.error('[Temporal] Failed to record shutdown event:', error);
+    console.error('[Temporal] Shutdown error:', error.message || error);
   }
 }
 
@@ -692,6 +716,8 @@ export async function recordShutdown(uptimeSeconds: number): Promise<void> {
 export default {
   initialize: initializeTemporalSystems,
   recordShutdown,
+  startBackgroundUpdates: startBackgroundTemporalUpdates,
+  stopBackgroundUpdates: stopBackgroundTemporalUpdates,
   calculateMoodDecay,
   calculateBeliefDecay,
   calculateMemoryRecency,

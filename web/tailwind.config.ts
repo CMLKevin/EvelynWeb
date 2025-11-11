@@ -4,6 +4,10 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      fontFamily: {
+        mono: ['SF Mono', 'SFMono-Regular', 'JetBrains Mono', 'Fira Code', 'IBM Plex Mono', 'Consolas', 'Monaco', 'monospace'],
+        sans: ['SF Mono', 'SFMono-Regular', 'JetBrains Mono', 'Fira Code', 'IBM Plex Mono', 'Consolas', 'Monaco', 'monospace']
+      },
       colors: {
         discord: {
           dark: '#1e1f22',

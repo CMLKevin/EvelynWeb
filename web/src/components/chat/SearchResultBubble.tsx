@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import MarkdownRenderer from '../common/MarkdownRenderer';
 
 interface SearchResultBubbleProps {
@@ -11,7 +11,7 @@ interface SearchResultBubbleProps {
   timestamp: string;
 }
 
-export default function SearchResultBubble({
+const SearchResultBubble = memo(function SearchResultBubble({
   query,
   originalQuery,
   answer,
@@ -140,5 +140,7 @@ export default function SearchResultBubble({
       </div>
     </div>
   );
-}
+});
+
+export default SearchResultBubble;
 

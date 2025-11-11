@@ -4,6 +4,7 @@ import { db } from '../db/client.js';
 import { setupRestoreRoutes } from './restore.js';
 import { setupBackupRoutes } from './backup.js';
 import temporalEngine from '../core/temporalEngine.js';
+import { logger } from '../utils/logger.js';
 
 export function setupRoutes(app: Express, io: Server) {
   
@@ -16,6 +17,18 @@ export function setupRoutes(app: Express, io: Server) {
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // Get logs
+  app.get('/api/logs', (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 200;
+      const logs = logger.getRecent(limit);
+      res.json({ logs, total: logs.length });
+    } catch (error) {
+      console.error('Get logs error:', error);
+      res.status(500).json({ error: 'Failed to fetch logs' });
+    }
   });
 
   // Temporal engine status
@@ -50,6 +63,37 @@ export function setupRoutes(app: Express, io: Server) {
     } catch (error) {
       console.error('Get messages error:', error);
       res.status(500).json({ error: 'Failed to fetch messages' });
+    }
+  });
+
+  // Delete specific message
+  app.delete('/api/messages/:id', async (req, res) => {
+    try {
+      const messageId = parseInt(req.params.id);
+      
+      if (isNaN(messageId)) {
+        return res.status(400).json({ error: 'Invalid message ID' });
+      }
+
+      // Get the message first to log it
+      const message = await db.message.findUnique({
+        where: { id: messageId }
+      });
+
+      if (!message) {
+        return res.status(404).json({ error: 'Message not found' });
+      }
+
+      // Delete the message
+      const deleted = await db.message.delete({
+        where: { id: messageId }
+      });
+
+      console.log(`🗑️  Deleted message #${messageId} (${message.role}): ${message.content.slice(0, 50)}...`);
+      res.json({ success: true, deleted });
+    } catch (error) {
+      console.error('Delete message error:', error);
+      res.status(500).json({ error: 'Failed to delete message' });
     }
   });
 

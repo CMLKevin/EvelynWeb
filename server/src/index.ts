@@ -50,16 +50,13 @@ setupWebSocket(io);
 // Initialize backup system
 async function initializeBackupSystem() {
   try {
-    // Create startup backup
-    console.log('[Backup] Creating startup backup...');
+    const startTime = Date.now();
     await backupManager.createBackup('auto', 'startup');
-    
-    // Start automatic backup system
     backupManager.startAutomaticBackups();
-    
-    console.log('[Backup] Multi-layer backup system initialized ✓');
+    const elapsedMs = Date.now() - startTime;
+    console.log(`[Backup] 💾 System initialized in ${elapsedMs}ms | auto-saves enabled`);
   } catch (error) {
-    console.error('[Backup] Failed to initialize backup system:', error);
+    console.error('[Backup] ❌ Init failed:', error.message || error);
   }
 }
 
@@ -70,8 +67,9 @@ let serverStartTime: number;
 
 httpServer.listen(PORT, async () => {
   serverStartTime = Date.now();
-  console.log(`🚀 Evelyn server running on port ${PORT}`);
-  console.log(`📡 WebSocket ready for connections\n`);
+  const bootStart = Date.now();
+  
+  console.log(`\n[Server] 🚀 Starting Evelyn on port ${PORT}...`);
   
   // Initialize temporal engine (system clock-based calculations)
   await temporalEngine.initialize();
@@ -82,28 +80,24 @@ httpServer.listen(PORT, async () => {
   // Initialize persona defaults
   await initializePersonaDefaults();
   
-  console.log('✨ All systems initialized\n');
+  const bootTime = Date.now() - bootStart;
+  console.log(`[Server] ✨ All systems ready in ${bootTime}ms | port ${PORT} | WebSocket online\n`);
 });
 
 // Graceful shutdown handlers
 async function gracefulShutdown(signal: string) {
-  console.log(`\n[Server] Received ${signal} signal, shutting down gracefully...`);
-  
-  // Calculate uptime
   const uptimeSeconds = Math.floor((Date.now() - serverStartTime) / 1000);
+  console.log(`\n[Server] 🛑 ${signal} received | shutting down gracefully...`);
   
-  // Record shutdown event in temporal engine
   await temporalEngine.recordShutdown(uptimeSeconds);
   
-  // Close HTTP server
   httpServer.close(() => {
-    console.log('[Server] HTTP server closed');
+    console.log(`[Server] ✅ Shutdown complete | goodbye!\n`);
     process.exit(0);
   });
   
-  // Force shutdown after 10 seconds
   setTimeout(() => {
-    console.error('[Server] Forced shutdown after timeout');
+    console.error('[Server] ⚠️ Force shutdown after timeout');
     process.exit(1);
   }, 10000);
 }

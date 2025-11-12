@@ -40,8 +40,6 @@ interface BackupMetadata {
     messages: number;
     memories: number;
     searchResults: number;
-    personalityAnchors: number;
-    chapters: number;
     moodStates: number;
     beliefs: number;
     goals: number;
@@ -104,8 +102,6 @@ class BackupManager {
       messages,
       memories,
       searchResults,
-      anchors,
-      chapters,
       moodStates,
       beliefs,
       goals,
@@ -117,8 +113,6 @@ class BackupManager {
       db.message.count(),
       db.memory.count(),
       db.searchResult.count(),
-      db.personalityAnchor.count(),
-      db.chapter.count(),
       db.moodState.count(),
       db.personaBelief.count(),
       db.personaGoal.count(),
@@ -132,8 +126,6 @@ class BackupManager {
       messages,
       memories,
       searchResults,
-      personalityAnchors: anchors,
-      chapters,
       moodStates,
       beliefs,
       goals,
@@ -405,9 +397,7 @@ class BackupManager {
         messages: await db.message.findMany(),
         memories: await db.memory.findMany(),
         searchResults: await db.searchResult.findMany(),
-        personalityAnchors: await db.personalityAnchor.findMany(),
         moodStates: await db.moodState.findMany(),
-        chapters: await db.chapter.findMany(),
         settings: await db.settings.findMany()
       };
 

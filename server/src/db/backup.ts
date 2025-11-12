@@ -238,7 +238,6 @@ class BackupManager {
           await fs.promises.unlink(metaPath);
         }
 
-        console.log(`[Backup] Deleted old backup: ${file}`);
       }
     } catch (error) {
       console.error('[Backup] Failed to apply retention:', error);

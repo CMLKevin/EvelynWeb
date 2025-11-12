@@ -60,14 +60,6 @@ model MemoryLink {
   @@unique([fromId, toId, relation])
 }
 
-model PersonalityAnchor {
-  id           Int      @id @default(autoincrement())
-  trait        String   @unique
-  value        Float
-  evidenceIds  String   // JSON Int[]
-  lastUpdateAt DateTime @default(now())
-  description  String
-}
 
 model MoodState {
   id               Int      @id @default(autoincrement())
@@ -209,8 +201,8 @@ model PersonaGoal {
 
 model PersonaEvolutionEvent {
   id           Int      @id @default(autoincrement())
-  type         String   // anchor | mood | belief | goal | relationship
-  target       String   // e.g., trait name, belief id, goal id, metric
+  type         String   // mood | belief | goal | relationship
+  target       String   // e.g., belief id, goal id, metric
   delta        Float?
   rationale    String
   evidenceIds  String   // JSON Int[]

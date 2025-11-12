@@ -55,14 +55,14 @@ export function setupRestoreRoutes(app: Express) {
       }
 
       console.log(`[Restore] Restored ${restoredCount} messages, skipped ${skippedCount} duplicates`);
-      res.json({ 
+      return res.json({ 
         success: true, 
         restored: restoredCount, 
         skipped: skippedCount 
       });
     } catch (error) {
       console.error('[Restore] Bulk message restore error:', error);
-      res.status(500).json({ error: 'Failed to restore messages' });
+      return res.status(500).json({ error: 'Failed to restore messages' });
     }
   });
 
@@ -113,70 +113,14 @@ export function setupRestoreRoutes(app: Express) {
       }
 
       console.log(`[Restore] Restored ${restoredCount} search results, skipped ${skippedCount} duplicates`);
-      res.json({ 
+      return res.json({ 
         success: true, 
         restored: restoredCount, 
         skipped: skippedCount 
       });
     } catch (error) {
       console.error('[Restore] Bulk search result restore error:', error);
-      res.status(500).json({ error: 'Failed to restore search results' });
-    }
-  });
-
-  // Restore personality anchors
-  app.post('/api/personality/restore', async (req, res) => {
-    try {
-      const { anchors, mood } = req.body;
-
-      if (!anchors || !Array.isArray(anchors)) {
-        return res.status(400).json({ error: 'Invalid personality data' });
-      }
-
-      console.log(`[Restore] Restoring ${anchors.length} personality anchors...`);
-
-      let restoredCount = 0;
-
-      for (const anchor of anchors) {
-        try {
-          await db.personalityAnchor.upsert({
-            where: { trait: anchor.trait },
-            create: {
-              trait: anchor.trait,
-              value: anchor.value,
-              evidenceIds: anchor.evidenceIds || '[]',
-              description: anchor.description || '',
-              lastUpdateAt: new Date()
-            },
-            update: {
-              value: anchor.value,
-              lastUpdateAt: new Date()
-            }
-          });
-          restoredCount++;
-        } catch (error) {
-          console.error(`[Restore] Failed to restore anchor ${anchor.trait}:`, error);
-        }
-      }
-
-      // Restore mood if provided
-      if (mood) {
-        await db.moodState.deleteMany({});
-        await db.moodState.create({
-          data: {
-            valence: mood.valence,
-            arousal: mood.arousal,
-            stance: mood.stance,
-            decayHalfLifeMins: mood.decayHalfLifeMins || 30
-          }
-        });
-      }
-
-      console.log(`[Restore] Restored ${restoredCount} personality anchors`);
-      res.json({ success: true, restored: restoredCount });
-    } catch (error) {
-      console.error('[Restore] Personality restore error:', error);
-      res.status(500).json({ error: 'Failed to restore personality' });
+      return res.status(500).json({ error: 'Failed to restore search results' });
     }
   });
 
@@ -186,24 +130,22 @@ export function setupRestoreRoutes(app: Express) {
       const messageCount = await db.message.count();
       const searchCount = await db.searchResult.count();
       const memoryCount = await db.memory.count();
-      const anchorCount = await db.personalityAnchor.count();
 
       const latestMessage = await db.message.findFirst({
         orderBy: { createdAt: 'desc' },
         select: { createdAt: true }
       });
 
-      res.json({
+      return res.json({
         messageCount,
         searchCount,
         memoryCount,
-        anchorCount,
         lastUpdate: latestMessage?.createdAt || null,
         serverTime: new Date().toISOString()
       });
     } catch (error) {
       console.error('[Restore] Status check error:', error);
-      res.status(500).json({ error: 'Failed to get restore status' });
+      return res.status(500).json({ error: 'Failed to get restore status' });
     }
   });
 }

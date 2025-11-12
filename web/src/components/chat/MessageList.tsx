@@ -2,10 +2,9 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useStore } from '../../state/store';
 import SearchResultBubble from './SearchResultBubble';
 import MarkdownRenderer from '../common/MarkdownRenderer';
-import TruncationIndicator from './TruncationIndicator';
 import AgentSessionInline from '../agent/AgentSessionInline';
 import AgentBrowsingResults from '../agent/AgentBrowsingResults';
-import { Trash2, User, Bot, Copy, Check } from 'lucide-react';
+import { Trash2, User, Bot, Copy, Check, Layers } from 'lucide-react';
 
 export default function MessageList() {
   // Optimize store selectors - only subscribe to what we need
@@ -15,6 +14,12 @@ export default function MessageList() {
   const agentSession = useStore(state => state.agentSession);
   const browsingResults = useStore(state => state.browsingResults);
   const deleteMessage = useStore(state => state.deleteMessage);
+  const contextUsage = useStore(state => state.contextUsage);
+  
+  // Get message IDs that are in the rolling context window
+  const messageIdsInContext = contextUsage?.messageIdsInContext ?? [];
+  // Only show context indicators if we have valid context data (array with items)
+  const hasContextData = messageIdsInContext.length > 0;
   
   const [deletingMessageId, setDeletingMessageId] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
@@ -100,8 +105,6 @@ export default function MessageList() {
         </div>
       )}
 
-      {/* Truncation Indicator - shows when context has been optimized */}
-      {messages.length > 0 && <TruncationIndicator />}
 
       {/* Render messages */}
       {(() => {
@@ -136,7 +139,7 @@ export default function MessageList() {
           return (
             <div key={`msg-group-${msg.id}`}>
               {/* Terminal Prompt Style Message */}
-              <div className={`terminal-prompt ${isUser ? 'terminal-prompt-user' : 'terminal-prompt-assistant'} group`}>
+              <div className={`terminal-prompt ${isUser ? 'terminal-prompt-user' : 'terminal-prompt-assistant'} group relative`}>
                 <div className="flex items-start gap-3 w-full">
                   {/* Prompt Symbol */}
                   <div className="flex-shrink-0 flex items-center gap-2">
@@ -159,6 +162,12 @@ export default function MessageList() {
                     <div className="flex items-center gap-3 mb-1 text-xs text-gray-500 monospace">
                       <span>{isUser ? 'user' : 'assistant'}</span>
                       <span>{formatTime(msg.createdAt)}</span>
+                      {hasContextData && messageIdsInContext.includes(msg.id) && (
+                        <span className="flex items-center gap-1 text-[9px] text-cyan-400" title="In active context window">
+                          <Layers className="w-2.5 h-2.5" />
+                          <span>IN CONTEXT</span>
+                        </span>
+                      )}
                       
                       {/* Actions (visible on hover) */}
                       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

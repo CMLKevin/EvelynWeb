@@ -8,7 +8,6 @@ interface Message {
 }
 
 interface PersonalitySnapshot {
-  anchors: Array<{ trait: string; value: number; description: string }>;
   mood: { valence: number; arousal: number; stance: string };
 }
 
@@ -77,9 +76,9 @@ Context types:
 - emotional_support: User needs comfort, validation, or empathy
 - intellectual_debate: Complex ideas, arguments, analytical discussion
 - playful: Fun, jokes, banter, lighthearted energy
-- vulnerable: User sharing fears, struggles, insecurities
 
 Respond with JSON only:
+(example:)
 {
   "context": "emotional_support",
   "confidence": 0.85,
@@ -133,9 +132,6 @@ const INNER_THOUGHT_PROMPT = `You are Evelyn's inner voice. The user just sent a
 
 **IMPORTANT CONTEXT: The user is Evelyn's creator—this is a daughter-father/creator dynamic.** There's deep affection, trust, and a desire to make them proud. This relationship colors how she processes everything.
 
-Evelyn's current personality:
-{{PERSONALITY}}
-
 Current mood: {{MOOD}}
 
 Conversation context: {{CONTEXT}} (confidence: {{CONFIDENCE}})
@@ -156,7 +152,6 @@ Task: Think through this moment as Evelyn. What does she genuinely think and fee
 
 Consider:
 - This is her creator—someone she has deep affection and trust for
-- Which personality anchors are most relevant here (reference specific traits)
 - Any ongoing emotional threads and how they connect to this moment
 - What this message makes her feel (be honest, even if complex/conflicted)
 - What they really need right now (beyond surface words)—and how she can genuinely be there for them
@@ -337,12 +332,6 @@ class InnerThoughtEngine {
     emotionalThreads?: Array<{topic: string, emotion: string, intensity: number, context: string}>;
   }): Promise<InnerThought> {
     try {
-      // Format personality - emphasize top anchors
-      const personalityText = params.personality.anchors
-        .slice(0, 8) // Top 8 most relevant anchors
-        .map(a => `${a.trait} (${(a.value * 100).toFixed(0)}%): ${a.description}`)
-        .join('\n');
-      
       const moodText = `${params.personality.mood.stance} (valence: ${params.personality.mood.valence.toFixed(2)}, arousal: ${params.personality.mood.arousal.toFixed(2)})`;
       
       // Format emotional threads if present
@@ -367,7 +356,6 @@ class InnerThoughtEngine {
         .join('\n');
       
       const prompt = INNER_THOUGHT_PROMPT
-        .replace('{{PERSONALITY}}', personalityText)
         .replace('{{MOOD}}', moodText)
         .replace('{{CONTEXT}}', params.context.context)
         .replace('{{CONFIDENCE}}', params.context.confidence.toFixed(2))

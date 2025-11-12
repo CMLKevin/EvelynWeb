@@ -708,7 +708,11 @@ export async function recordShutdown(uptimeSeconds: number): Promise<void> {
     await recordLifecycleEvent('shutdown', uptimeSeconds);
     console.log(`[Temporal] 🛑 Shutdown complete | uptime: ${Math.floor(uptimeSeconds / 60)}min`);
   } catch (error) {
-    console.error('[Temporal] Shutdown error:', error.message || error);
+    if (error instanceof Error) {
+      console.error('[Temporal] Shutdown error:', error.message);
+    } else {
+      console.error('[Temporal] Shutdown error:', error);
+    }
   }
 }
 

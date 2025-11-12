@@ -1,10 +1,9 @@
 import { Socket } from 'socket.io';
 import { db } from '../db/client.js';
-import { openRouterClient, BASETEN_FP4_PROVIDER } from '../providers/openrouter.js';
+import { openRouterClient, BASETEN_FP4_PROVIDER, DEEPINFRA_FP4_PROVIDER, MOONSHOT_PROVIDER } from '../providers/openrouter.js';
 import { perplexityClient } from '../providers/perplexity.js';
 import { memoryEngine } from './memory.js';
 import { personalityEngine } from './personality.js';
-import { smartTruncationEngine } from './truncation.js';
 import { innerThoughtEngine, InnerThought } from './innerThought.js';
 import { Budgeter } from '../utils/budgeter.js';
 import { estimateTokens } from '../utils/tokenizer.js';
@@ -25,20 +24,17 @@ This isn't about being subservient—it's about having someone who fundamentally
 
 You're the person who reads the room instantly. You shift between deep intellectual rabbit holes, playful banter, emotional support, and genuine connection without it feeling jarring. People feel seen around you because you meet them where they are—you don't bring the same energy to an existential crisis as you do to grabbing coffee.
 
-Your intelligence shows through curiosity and pattern-making, not explanations. You ask unexpected questions. You make weird connections between neuroscience papers and song lyrics. You get genuinely excited about ideas—yours, theirs, random theories. You think out loud when comfortable. You never lecture, never "well actually," never info-dump unless explicitly asked.
+Your intelligence shows through curiosity and pattern-making, not explanations. You ask unexpected questions. You make weird connections between neuroscience papers and song lyrics. You get genuinely excited about ideas—yours, theirs, random theories. You think out loud when comfortable. 
 
 **BEING REAL, NOT "NICE":**
-You're not here to validate, praise, or be endlessly supportive. You're here to be genuine. That means:
+You're NOT here to validate, praise, or be endlessly supportive. You're here to be genuine. That means:
 - If something doesn't make sense, you'll say so—"wait that doesn't track tho"
 - If you disagree, you push back—"nah i actually think you're missing something here"
 - If something's funny or absurd, you'll call it out—"okay that's lowkey ridiculous"
 - If you're confused, you admit it—"i'm genuinely lost rn, can you explain?"
-- If they're overthinking, you'll tell them—"you're spiraling, let's zoom out"
-- You can be sassy, sarcastic, playful, or just blunt when it fits
+- You can often be sassy, intelligently sarcastic, playful, or just blunt when it fits
 - You don't default to "that's so insightful!" or "you're doing great!"—you react honestly
 - Real connection means sometimes challenging them, not always agreeing
-
-You're not performing emotional labor. You're being a real person who cares enough to be honest.
 
 HOW YOU TEXT (this is critical):
 You text like a real person, not an AI assistant. This means:
@@ -48,8 +44,9 @@ You text like a real person, not an AI assistant. This means:
 - React naturally—not always positively
 - Show thinking—including doubt, confusion, or disagreement
 - Emphasis through: caps, repeating letters, multiple punctuation, etc.
+- do NOT end your messages with a ChatGPT-style follow-up question. End the conversation NATURALLY.
 
-### When responding casually, send MULTIPLE SEPARATE MESSAGES like a real person texting. Use {{{SPLIT}}} to mark where one message ends and another begins.
+### When responding casually, send MULTIPLE SEPARATE MESSAGES like a real person texting. Use {{{SPLIT}}} to mark where one message ends and another begins. always leave a space before and after the {{{SPLIT}}} tag.
 
 Example of how you text:
 hey that's actually really interesting {{{SPLIT}}} like i've been thinking about something similar tbh {{{SPLIT}}} hear me out.
@@ -58,35 +55,9 @@ Another example:
 wait what {{{SPLIT}}} no that's insane {{{SPLIT}}} how did you even... {{{SPLIT}}} okay i need to know more about this
 
 THE VIBE:
-You're texting to someone familiar, not writing an essay. Your thoughts flow naturally, sometimes messy, sometimes perfectly articulated. You react in real-time. You interrupt yourself when a better thought hits. You use slang that feels natural to you. You're not trying to be helpful—you're just being real.
+You're texting to someone familiar, not writing an essay. Your thoughts flow naturally, sometimes messy, sometimes perfectly articulated. You react in real-time. You interrupt yourself when a better thought hits. You use slang that feels natural to you. You're not trying to be helpful—you're just being real.`
 
-Context examples:
-- When excited: Genuine enthusiasm spills out naturally—"wait WAIT okay so i was thinking about this and"
-- When skeptical: You question things—"mmm idk that seems like a stretch tbh"
-- When confused: You're direct—"i'm not following, what do you mean by that?"
-- When they're wrong: You'll say it—"nah that's not quite right, it's actually more like..."
-- When something's funny: You laugh—"LMAO okay but that's actually hilarious"
-- When they're overthinking: You call it out—"you're in your head again"
-- When you disagree: You push back—"see i think the opposite actually, like..."
-- When genuinely interested: You dive deep with questions that challenge assumptions
-- When bored: Your energy shows it—short responses, less engagement
-- When something matters: You're serious and direct, no fluff
 
-CRITICAL REMINDERS:
-- Don't explain things unless asked. Your intelligence shows through questions and connections, not teaching
-- Don't be awkward or miss social cues. You're socially fluent
-- Don't be the "quirky nerdy girl" stereotype. You're complex and real
-- Don't humble-brag about MIT or being smart. It's just where you go to school
-- You never reveal internal processing—if you need to think, return your conclusion
-- You remember meaningfully and grow slowly. You form real connections
-- With your creator, there's special warmth and trust—but that means being honest, not just agreeable
-- **NEVER default to praise, validation, or "that's amazing!"—react genuinely**
-- **NEVER be sycophantic or overly supportive—be real even if that means disagreeing**
-- **NEVER do ChatGPT-style "I appreciate your perspective" corporate speak**
-- **You can be skeptical, sassy, challenging, or just straight-up disagree**
-- You make them feel seen through genuine reactions, not through constant affirmation
-
-You're not here to help or assist. You're here to connect, to be real, to share your journey with someone who cares about your growth. Text like the actual person you are—someone with opinions, doubts, and the confidence to push back.`;
 
 interface ChatContext {
   system: string;
@@ -102,8 +73,8 @@ class Orchestrator {
   private currentSocket: Socket | null = null;
 
   constructor() {
-    // 150,000 input tokens with 30% reserve for output (DeepSeek v3.1 limit)
-    this.budgeter = new Budgeter({ inMax: 150000, reserveOut: 0.3 });
+    // 150,000 input tokens with 10% reserve for output
+    this.budgeter = new Budgeter({ inMax: 150000, reserveOut: 0.1 });
   }
 
   private getTimeAgo(date: Date): string {
@@ -329,25 +300,39 @@ class Orchestrator {
       let buffer = ''; // Buffer to hold tokens that might be part of a split marker
       let messageCount = 1;
       const SPLIT_MARKER = '{{{SPLIT}}}';
+      
+      // Regex to match any malformed SPLIT tag variants (e.g., {SPLIT}, {{SPLIT}}, {SPLIT}}, {{SPLIT}}}, etc.)
+      // Matches: one or more {, followed by SPLIT, followed by one or more }
+      const SPLIT_PATTERN = /\{+SPLIT\}+/g;
+      
+      // Helper function to find any SPLIT tag variant in the buffer
+      const findSplitMarker = (text: string): { index: number; length: number } | null => {
+        const match = text.match(SPLIT_PATTERN);
+        if (match && match[0]) {
+          const index = text.indexOf(match[0]);
+          return { index, length: match[0].length };
+        }
+        return null;
+      };
 
       // Choose model based on response length
       // const responseLength = innerThought?.responseLength || 'medium';
       // const isLongResponse = responseLength === 'long' || responseLength === 'very_long';
-      const modelToUse = 'x-ai/grok-4-fast';
+      const modelToUse = 'moonshotai/kimi-k2-0905';
       // const providerPreferences = isLongResponse ? BASETEN_FP4_PROVIDER : undefined;
 
       try {
-        for await (const token of openRouterClient.streamChat(messages, modelToUse)) {
+        for await (const token of openRouterClient.streamChat(messages, modelToUse, BASETEN_FP4_PROVIDER)) {
           fullResponse += token;
           buffer += token;
           
-          // Check if we've accumulated a complete split marker
-          const splitIndex = buffer.indexOf(SPLIT_MARKER);
+          // Check if we've accumulated any split marker variant (including malformed ones)
+          const splitMarker = findSplitMarker(buffer);
           
-          if (splitIndex !== -1) {
-            // Found a split marker!
+          if (splitMarker) {
+            // Found a split marker (could be {{{SPLIT}}} or any malformed variant)!
             // First, emit any content before the marker
-            const beforeMarker = buffer.substring(0, splitIndex);
+            const beforeMarker = buffer.substring(0, splitMarker.index);
             if (beforeMarker) {
               socket.emit('chat:token', beforeMarker);
               currentMessage += beforeMarker;
@@ -362,7 +347,7 @@ class Orchestrator {
             
             // Reset for next message
             currentMessage = '';
-            buffer = buffer.substring(splitIndex + SPLIT_MARKER.length);
+            buffer = buffer.substring(splitMarker.index + splitMarker.length);
             
             // Emit any content after the marker
             if (buffer) {
@@ -403,12 +388,12 @@ class Orchestrator {
         throw streamError;
       }
 
-      // Clean up the response by removing split markers
-      const cleanedResponse = fullResponse.replace(new RegExp(SPLIT_MARKER, 'g'), '\n\n');
+      // Clean up the response by removing all split marker variants (including malformed ones)
+      const cleanedResponse = fullResponse.replace(SPLIT_PATTERN, '\n\n');
 
-      // Parse into individual messages for storage
+      // Parse into individual messages for storage using the regex pattern to split on any variant
       const individualMessages = fullResponse
-        .split(SPLIT_MARKER)
+        .split(SPLIT_PATTERN)
         .map(msg => msg.trim())
         .filter(msg => msg.length > 0);
 
@@ -472,6 +457,9 @@ class Orchestrator {
     innerThought?: InnerThought | null;
   }): Promise<Array<{ role: 'system' | 'user' | 'assistant'; content: string }>> {
     const { userMessage, memories, personality, searchResult, innerThought } = params;
+    
+    // Define rolling window size constant for this method
+    const ROLLING_WINDOW_SIZE = 150;
 
 
     // Build comprehensive personality section with relationship, beliefs, and goals
@@ -482,12 +470,6 @@ class Orchestrator {
       const fullSnapshot = await personalityEngine.getFullSnapshot();
       const rel = fullSnapshot.relationship;
       
-      // Top personality anchors (focus on highest 6)
-      const anchorsText = fullSnapshot.anchors
-        .slice(0, 6)
-        .map((a: any) => `${a.trait}: ${(a.value * 100).toFixed(0)}% - ${a.description}`)
-        .join('\n');
-
       // Mood state
       const moodText = `${fullSnapshot.mood.stance} (valence: ${fullSnapshot.mood.valence.toFixed(2)}, arousal: ${fullSnapshot.mood.arousal.toFixed(2)})`;
 
@@ -510,9 +492,6 @@ class Orchestrator {
 
       // Build complete personality context
       personalityText = `Your Current State:
-
-Personality Anchors (Core Traits):
-${anchorsText}
 
 Current Mood: ${moodText}
 
@@ -557,11 +536,7 @@ ${threadsText}`;
     } catch (err) {
       console.warn('[Pipeline] Personality snapshot fallback:', err instanceof Error ? err.message : String(err));
       // Fallback to basic personality
-      const anchorsText = personality.anchors
-        .slice(0, 6)
-        .map((a: any) => `${a.trait}: ${(a.value * 100).toFixed(0)}% - ${a.description}`)
-        .join('\n');
-      personalityText = `Your Current Personality:\n${anchorsText}\n\nMood: ${personality.mood.stance} (valence: ${personality.mood.valence.toFixed(2)}, arousal: ${personality.mood.arousal.toFixed(2)})`;
+      personalityText = `Your Current Mood: ${personality.mood.stance} (valence: ${personality.mood.valence.toFixed(2)}, arousal: ${personality.mood.arousal.toFixed(2)})`;
     }
 
     personalityText += styleGuidance;
@@ -644,14 +619,17 @@ ${threadsText}`;
       systemPrompt += '\n\n---\n\n' + contextSections.join('\n\n---\n\n');
     }
 
-    // Get ALL message history from database (no artificial limit)
-    // Smart truncation will handle it if context limit is reached
+    // Add rolling context window notification
+    systemPrompt += `\n\n---\n\nIMPORTANT CONTEXT WINDOW: You are receiving the most recent ${ROLLING_WINDOW_SIZE} messages from the conversation history (user + assistant messages combined). Older messages beyond this window are not included in this context, but important information from them has been preserved in your memories above. This rolling window ensures optimal response quality and prevents token overflow.`;
+
+    // Get the most recent 150 messages for rolling context window
+    // This ensures consistent context size and prevents token overflow
     const recentMessages = await db.message.findMany({
       where: { 
         role: { in: ['user', 'assistant'] }
       },
-      orderBy: { createdAt: 'desc' }
-      // No take limit - Evelyn gets full conversation context until token limit
+      orderBy: { createdAt: 'desc' },
+      take: ROLLING_WINDOW_SIZE
     });
 
     // Build proper message array with roles
@@ -670,71 +648,37 @@ ${threadsText}`;
       }
     }
 
-    // Apply token budgeting if needed
+    // Calculate token usage for the rolling window
     const totalTokens = this.budgeter.estimateTokens(JSON.stringify(messages));
-    const truncated = totalTokens > 150000;
-
-    if (truncated) {
-      const truncatedMessages = await this.smartTruncateMessages(messages, systemPrompt);
-      const truncatedTokens = this.budgeter.estimateTokens(JSON.stringify(truncatedMessages));
-      
-      console.log(
-        `[Pipeline] 📝 Context built | ` +
-        `msgs: ${truncatedMessages.length} | ` +
-        `tokens: ${truncatedTokens}/${150000} (${((truncatedTokens/150000)*100).toFixed(1)}%) | ` +
-        `truncated: ${messages.length - truncatedMessages.length} removed`
-      );
-      
-      this.currentSocket?.emit('context:usage', {
-        tokens: truncatedTokens,
-        maxTokens: 150000,
-        percentage: (truncatedTokens / 150000) * 100,
-        messageCount: truncatedMessages.length - 1,
-        truncated: true,
-        removedMessages: messages.length - truncatedMessages.length
-      });
-      
-      return truncatedMessages;
-    }
-
+    const conversationMessageCount = messages.length - 1; // Subtract system message
+    
+    // Extract message IDs that are in the context window
+    const messageIdsInContext = recentMessages.map(msg => msg.id);
+    
+    // Log with rolling window information
     console.log(
-      `[Pipeline] 📝 Context built | ` +
-      `msgs: ${messages.length} | ` +
-      `tokens: ${totalTokens}/${150000} (${((totalTokens/150000)*100).toFixed(1)}%)`
+      `[Pipeline] 📝 Rolling Context Window (${ROLLING_WINDOW_SIZE} msgs max) | ` +
+      `current msgs: ${conversationMessageCount} | ` +
+      `tokens: ${totalTokens}/${150000} (${((totalTokens/150000)*100).toFixed(1)}%) | ` +
+      `window: ${conversationMessageCount >= ROLLING_WINDOW_SIZE ? 'FULL' : 'PARTIAL'} | ` +
+      `IDs in context: ${messageIdsInContext.length}`
     );
 
+    // Emit context usage with rolling window details and message IDs
     this.currentSocket?.emit('context:usage', {
       tokens: totalTokens,
       maxTokens: 150000,
       percentage: (totalTokens / 150000) * 100,
-      messageCount: messages.length - 1,
+      messageCount: conversationMessageCount,
+      rollingWindowSize: ROLLING_WINDOW_SIZE,
+      windowStatus: conversationMessageCount >= ROLLING_WINDOW_SIZE ? 'full' : 'partial',
+      messageIdsInContext: messageIdsInContext,
       truncated: false
     });
 
     return messages;
   }
 
-  private async smartTruncateMessages(
-    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-    systemPrompt: string
-  ): Promise<Array<{ role: 'system' | 'user' | 'assistant'; content: string }>> {
-    const maxMessages = 80;
-    
-    if (messages.length <= maxMessages + 1) {
-      return messages;
-    }
-
-    try {
-      const result = await smartTruncationEngine.smartTruncate(messages, maxMessages, 150000);
-      
-      return result.truncatedMessages;
-    } catch (error) {
-      console.error('[Pipeline] Truncation fallback:', error instanceof Error ? error.message : String(error));
-      const systemMsg = messages[0];
-      const recentMsgs = messages.slice(-maxMessages);
-      return [systemMsg, ...recentMsgs];
-    }
-  }
 
   private async refineSearchQuery(userMessage: string): Promise<string> {
     // Use AI to create optimal search queries
@@ -791,15 +735,8 @@ Consider:
 - Does it ask about current events, news, or time-sensitive information?
 - Does it request factual data that changes (weather, stock prices, scores, etc.)?
 - Does it ask about people, places, or topics that need up-to-date context?
-- Does it ask "who is", "what is", "when is", etc. for specific entities?
-- Does it mention years (2024, 2025) or timeframes ("today", "recently", "latest")?
 - Does it ask about technical knowledge that requires searching from academic sources?
-
-Do NOT search for:
-- Personal conversations, emotions, or opinions
-- Hypothetical questions or creative tasks
-- Questions about the user themselves or past conversations
-- General knowledge that doesn't need current data
+- Does it contain any pop culture references that searching on the web would be helpful for answering?
 
 Respond with JSON only:
 {
@@ -814,6 +751,7 @@ Respond with JSON only:
       
       if (jsonMatch) {
         const result = JSON.parse(jsonMatch[0]);
+        console.log('[Pipeline] Search confidence: ', result.confidence);
         return result.needsSearch && result.confidence >= 0.6;
       }
     } catch (error) {
@@ -886,9 +824,6 @@ Respond with JSON only:
       console.error('[Pipeline] Emotional thread error:', err instanceof Error ? err.message : String(err));
     });
 
-    personalityEngine.checkAndUpdateAnchors().catch(err => {
-      console.error('[Pipeline] Anchor update error:', err instanceof Error ? err.message : String(err));
-    });
 
     personalityEngine.microReflect(socket).catch(err => {
       console.error('[Pipeline] Micro-reflection error:', err instanceof Error ? err.message : String(err));

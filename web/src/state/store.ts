@@ -47,7 +47,6 @@ interface SearchResult {
 }
 
 interface Personality {
-  anchors: Array<{ trait: string; value: number; description: string }>;
   mood: { valence: number; arousal: number; stance: string };
 }
 
@@ -95,7 +94,6 @@ interface PersonaEvolutionEvent {
 }
 
 interface FullPersona {
-  anchors: Array<{ trait: string; value: number; description: string }>;
   mood: { valence: number; arousal: number; stance: string };
   relationship: RelationshipState;
   beliefs: PersonaBelief[];
@@ -109,6 +107,9 @@ interface ContextUsage {
   messageCount: number;
   truncated: boolean;
   removedMessages?: number;
+  rollingWindowSize?: number;
+  windowStatus?: 'full' | 'partial';
+  messageIdsInContext?: number[];
   timestamp: string;
 }
 
@@ -121,7 +122,6 @@ interface ReflectionEvent {
   updatedBeliefs?: number;
   newGoals?: number;
   updatedGoals?: number;
-  anchorNudges?: number;
   duration?: string;
   timestamp: string;
 }

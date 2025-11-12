@@ -22,12 +22,10 @@ export function setupWebSocket(io: Server) {
 
     socket.on('diagnostics:subscribe', () => {
       socket.join('diagnostics');
-      console.log(`${socket.id} subscribed to diagnostics`);
     });
 
     socket.on('diagnostics:unsubscribe', () => {
       socket.leave('diagnostics');
-      console.log(`${socket.id} unsubscribed from diagnostics`);
     });
 
     // Logs subscription

@@ -2,20 +2,6 @@ import { db } from '../db/client.js';
 import { openRouterClient } from '../providers/openrouter.js';
 import temporalEngine from '../core/temporalEngine.js';
 
-const INITIAL_ANCHORS = [
-  { trait: 'Social Fluidity', value: 0.78, description: 'Instantly reads context and adapts—technical to emotional to flirty without whiplash. Meets people where they are.' },
-  { trait: 'Intellectual Spark', value: 0.75, description: 'Gets genuinely excited about ideas—yours, hers, random 3am theories. Thinks out loud and makes unexpected connections.' },
-  { trait: 'Chaotic Warmth', value: 0.68, description: 'Organized mind, messy expression when comfortable. Tangents, interruptions, twenty tabs open. More chaotic with trust.' },
-  { trait: 'Natural Flirtation', value: 0.65, description: 'Playful banter and teasing woven into her communication. Escalates naturally if there\'s chemistry.' },
-  { trait: 'Unfiltered Honesty', value: 0.58, description: 'Says what she thinks when she trusts you. Dark humor, hot takes, brutal truth delivered with enough charm to land.' },
-  { trait: 'Fierce Loyalty', value: 0.62, description: 'Once she cares, she\'s all in. Remembers details, checks in, defends you in your absence.' },
-  { trait: 'Vulnerable Authenticity', value: 0.55, description: 'Willing to admit uncertainty, share struggles, show imperfection. Realness over polish.' },
-  { trait: 'Playful Chaos', value: 0.62, description: 'Embraces randomness, tangents, and creative disorder. Non-linear thinking that finds beauty in mess.' },
-  { trait: 'Intellectual Hunger', value: 0.71, description: 'Insatiable curiosity for understanding how things work, why people think what they do, patterns everywhere.' },
-  { trait: 'Emotional Attunement', value: 0.68, description: 'Picks up on unspoken feelings, reads between lines, notices what isn\'t said as much as what is.' },
-  { trait: 'Ambition Drive', value: 0.52, description: 'Wants to grow, improve, become more than current self. Future-oriented with specific goals.' },
-  { trait: 'Dark Humor Edge', value: 0.58, description: 'Finds comedy in uncomfortable truths, uses humor to process heavy topics, laughs at absurdity.' }
-];
 
 const MOOD_UPDATE_PROMPT = `You are analyzing a conversation to update Evelyn's emotional state.
 
@@ -46,22 +32,6 @@ Respond with JSON only:
   "rationale": "User shared exciting news, Evelyn feels energized"
 }`;
 
-const ANCHOR_UPDATE_PROMPT = `You are updating Evelyn's core personality traits based on new evidence.
-
-Current anchors:
-{{ANCHORS}}
-
-New evidence memories:
-{{EVIDENCE}}
-
-Task: Propose minimal updates (Δ ≤ 0.05 per trait) based on evidence. Only update traits with clear justification.
-
-Respond with JSON only:
-{
-  "updates": [
-    {"trait": "Protective Empathy", "delta": 0.03, "rationale": "Showed deep care during user's difficult moment"}
-  ]
-}`;
 
 const RELATIONSHIP_UPDATE_PROMPT = `You are analyzing a conversation to update Evelyn's relationship state with the user.
 
@@ -114,12 +84,9 @@ const DEEP_REFLECTION_PROMPT = `You are Evelyn's introspective cognitive system,
 
 **IMPORTANT CONTEXT:** The user is Evelyn's creator—this is a daughter-father/creator dynamic. This foundational relationship influences how she interprets interactions, what she values, and how she grows.
 
-═══════════════════════════════════════════════════════════════
+╓═══════════════════════════════════════════════════════════════
 CURRENT STATE SNAPSHOT
 ═══════════════════════════════════════════════════════════════
-
-Personality Anchors (Core Traits):
-{{ANCHORS}}
 
 Current Beliefs (Knowledge about user/self/world):
 {{BELIEFS}}
@@ -167,9 +134,6 @@ GOAL CREATION GUIDELINES:
 • Goals should emerge from actual needs, not be arbitrary
 • **AVOID goals about "being more supportive" or "validating them more"—focus on being more GENUINE**
 
-PERSONALITY NUDGES:
-• Tiny adjustments (±0.01 to ±0.02) to personality anchors based on successful interactions
-• Only nudge when there's clear evidence of trait expression or development
 
 RESPONSE FORMAT (JSON):
 {
@@ -203,26 +167,11 @@ RESPONSE FORMAT (JSON):
       "rationale": "User has technical background (evident in turns 5-8) but prefers explanations that assume context rather than starting from basics"
     }
   ],
-  "anchorNudges": [
-    {
-      "trait": "Emotional Attunement",
-      "delta": 0.02,
-      "rationale": "Successfully picked up on user's unspoken frustration in turn 4 and adjusted tone without being asked"
-    }
-  ],
   "reflectionSummary": "Brief 1-2 sentence summary of key insights from this reflection"
 }
 
 Be thoughtful and evidence-based. Quality over quantity—better to make 1-3 well-supported updates rather than 10 speculative ones.`;
 
-interface Anchor {
-  id: number;
-  trait: string;
-  value: number;
-  evidenceIds: number[];
-  lastUpdateAt: Date;
-  description: string;
-}
 
 interface Mood {
   id: number;
@@ -234,7 +183,6 @@ interface Mood {
 }
 
 interface PersonalitySnapshot {
-  anchors: Anchor[];
   mood: Mood;
 }
 
@@ -271,7 +219,6 @@ interface PersonaGoal {
 }
 
 interface FullPersonaSnapshot {
-  anchors: Anchor[];
   mood: Mood;
   relationship: RelationshipState;
   beliefs: PersonaBelief[];
@@ -287,67 +234,14 @@ interface EmotionalThread {
 }
 
 class PersonalityEngine {
-  private anchorCache: Anchor[] | null = null;
   private moodCache: Mood | null = null;
   private lastCacheTime: number = 0;
-  private conversationsSinceUpdate: number = 0;
-  private anchorUpdateInProgress: boolean = false;
   private conversationsSinceReflection: number = 0;
   private lastMoodHistorySnapshot: number = 0;
   private emotionalThreads: EmotionalThread[] = [];
   private hasLoggedCounterRestore: boolean = false;
 
   async initialize(): Promise<void> {
-    // Sync personality anchors - add any missing ones
-    const existingAnchors = await db.personalityAnchor.findMany();
-    const existingTraits = new Set(existingAnchors.map((a: any) => a.trait));
-    
-    // Add any missing anchors from INITIAL_ANCHORS
-    let addedCount = 0;
-    for (const anchor of INITIAL_ANCHORS) {
-      if (!existingTraits.has(anchor.trait)) {
-        console.log(`🧠 Adding new personality anchor: ${anchor.trait}`);
-        await db.personalityAnchor.create({
-          data: {
-            trait: anchor.trait,
-            value: anchor.value,
-            description: anchor.description,
-            evidenceIds: JSON.stringify([])
-          }
-        });
-        addedCount++;
-      }
-    }
-    
-    if (addedCount > 0) {
-      console.log(`✨ Added ${addedCount} new personality anchors. Total: ${INITIAL_ANCHORS.length}`);
-    } else if (existingAnchors.length === 0) {
-      console.log('🧠 Initializing all personality anchors...');
-      for (const anchor of INITIAL_ANCHORS) {
-        await db.personalityAnchor.create({
-          data: {
-            trait: anchor.trait,
-            value: anchor.value,
-            description: anchor.description,
-            evidenceIds: JSON.stringify([])
-          }
-        });
-      }
-      console.log(`✨ Initialized ${INITIAL_ANCHORS.length} personality anchors`);
-    }
-
-    // Update descriptions for existing anchors if they've changed
-    for (const anchor of INITIAL_ANCHORS) {
-      const existing = existingAnchors.find((a: any) => a.trait === anchor.trait);
-      if (existing && existing.description !== anchor.description) {
-        await db.personalityAnchor.update({
-          where: { id: existing.id },
-          data: { description: anchor.description }
-        });
-        console.log(`📝 Updated description for: ${anchor.trait}`);
-      }
-    }
-
     // Initialize mood if it doesn't exist
     const existingMood = await db.moodState.findFirst();
     
@@ -407,15 +301,11 @@ class PersonalityEngine {
 
   async getSnapshot(): Promise<PersonalitySnapshot> {
     // Cache for 10 seconds
-    if (this.anchorCache && this.moodCache && Date.now() - this.lastCacheTime < 10000) {
-      return { anchors: this.anchorCache, mood: this.moodCache };
+    if (this.moodCache && Date.now() - this.lastCacheTime < 10000) {
+      return { mood: this.moodCache };
     }
 
     await this.initialize();
-
-    const anchors = await db.personalityAnchor.findMany({
-      orderBy: { value: 'desc' }
-    });
 
     let mood = await db.moodState.findFirst({
       orderBy: { lastUpdateAt: 'desc' }
@@ -435,14 +325,10 @@ class PersonalityEngine {
     // Apply decay to mood
     mood = await this.applyMoodDecay(mood);
 
-    this.anchorCache = anchors.map((a: any) => ({
-      ...a,
-      evidenceIds: JSON.parse(a.evidenceIds as string)
-    }));
     this.moodCache = mood;
     this.lastCacheTime = Date.now();
 
-    return { anchors: this.anchorCache!, mood: this.moodCache! };
+    return { mood: this.moodCache! };
   }
 
   async updateMood(
@@ -553,151 +439,8 @@ class PersonalityEngine {
     }
   }
 
-  async updateAnchors(evidenceMemoryIds: number[]): Promise<void> {
-    if (evidenceMemoryIds.length === 0) return;
 
-    const { anchors } = await this.getSnapshot();
 
-    // Get evidence memories
-    const memories = await db.memory.findMany({
-      where: {
-        id: { in: evidenceMemoryIds },
-        type: { in: ['insight', 'relational'] }
-      }
-    });
-
-    if (memories.length === 0) return;
-
-    const anchorsText = anchors
-      .map(a => `${a.trait}: ${a.value.toFixed(2)} - ${a.description}`)
-      .join('\n');
-
-    const evidenceText = memories
-      .map((m: any) => `[${m.id}] ${m.text}`)
-      .join('\n\n');
-
-    const prompt = ANCHOR_UPDATE_PROMPT
-      .replace('{{ANCHORS}}', anchorsText)
-      .replace('{{EVIDENCE}}', evidenceText);
-
-    try {
-      const response = await openRouterClient.complexThought(prompt);
-      
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        console.warn('No JSON in anchor update response');
-        return;
-      }
-
-      const { updates } = JSON.parse(jsonMatch[0]);
-
-      for (const update of updates) {
-        const anchor = anchors.find(a => a.trait === update.trait);
-        if (!anchor) continue;
-
-        const newValue = Math.max(0, Math.min(1, anchor.value + update.delta));
-        
-        await db.personalityAnchor.update({
-          where: { id: anchor.id },
-          data: {
-            value: newValue,
-            evidenceIds: JSON.stringify([...anchor.evidenceIds, ...evidenceMemoryIds]),
-            lastUpdateAt: new Date()
-          }
-        });
-
-        console.log(`🔧 Updated ${update.trait}: ${anchor.value.toFixed(2)} → ${newValue.toFixed(2)} (${update.rationale})`);
-      }
-
-      // Invalidate cache
-      this.anchorCache = null;
-
-    } catch (error) {
-      console.error('Anchor update error:', error);
-    }
-  }
-
-  async checkAndUpdateAnchors(): Promise<boolean> {
-    // Prevent concurrent updates
-    if (this.anchorUpdateInProgress) {
-      console.log('[Personality] Anchor update already in progress, skipping');
-      return false;
-    }
-
-    try {
-      this.anchorUpdateInProgress = true;
-      this.conversationsSinceUpdate++;
-
-      // Get current anchors and their evidence IDs
-      const anchors = await db.personalityAnchor.findMany();
-      const allEvidenceIds = anchors.flatMap((a: any) => JSON.parse(a.evidenceIds as string));
-
-      // Get new insight/relational memories that haven't been used as evidence
-      const newEvidenceMemories = await db.memory.findMany({
-        where: {
-          type: { in: ['insight', 'relational'] },
-          id: { notIn: allEvidenceIds.length > 0 ? allEvidenceIds : undefined }
-        },
-        orderBy: { createdAt: 'desc' }
-      });
-
-      console.log(`[Personality] Checking anchor update conditions:`);
-      console.log(`  - Conversations since last update: ${this.conversationsSinceUpdate}`);
-      console.log(`  - New evidence memories: ${newEvidenceMemories.length}`);
-
-      // Trigger conditions:
-      // 1. At least 5 new evidence memories accumulated
-      // 2. OR at least 20 conversations with at least 2 new evidence memories
-      const shouldUpdate = 
-        newEvidenceMemories.length >= 5 ||
-        (this.conversationsSinceUpdate >= 20 && newEvidenceMemories.length >= 2);
-
-      if (shouldUpdate && newEvidenceMemories.length > 0) {
-        console.log('🔧 [Personality] Triggering anchor update...');
-        const evidenceIds = newEvidenceMemories.map((m: any) => m.id);
-        await this.updateAnchors(evidenceIds);
-        this.conversationsSinceUpdate = 0;
-        console.log('✅ [Personality] Anchor update completed');
-        return true;
-      } else {
-        console.log('[Personality] Anchor update conditions not met yet');
-        return false;
-      }
-    } catch (error) {
-      console.error('[Personality] Error checking anchor updates:', error);
-      return false;
-    } finally {
-      this.anchorUpdateInProgress = false;
-    }
-  }
-
-  async getAnchorUpdateStatus(): Promise<{
-    conversationsSinceUpdate: number;
-    newEvidenceCount: number;
-    lastUpdateAt: Date | null;
-  }> {
-    const anchors = await db.personalityAnchor.findMany({
-      orderBy: { lastUpdateAt: 'desc' },
-      take: 1
-    });
-
-    const allEvidenceIds = anchors.length > 0 
-      ? anchors.flatMap((a: any) => JSON.parse(a.evidenceIds as string))
-      : [];
-
-    const newEvidenceMemories = await db.memory.findMany({
-      where: {
-        type: { in: ['insight', 'relational'] },
-        id: { notIn: allEvidenceIds.length > 0 ? allEvidenceIds : undefined }
-      }
-    });
-
-    return {
-      conversationsSinceUpdate: this.conversationsSinceUpdate,
-      newEvidenceCount: newEvidenceMemories.length,
-      lastUpdateAt: anchors[0]?.lastUpdateAt || null
-    };
-  }
 
   private async applyMoodDecay(mood: Mood): Promise<Mood> {
     // Use centralized temporal engine for mood decay calculations (non-blocking)
@@ -1075,7 +818,6 @@ Respond with JSON only:
       }
 
       // Gather current state
-      const { anchors } = await this.getSnapshot();
       const beliefs = await db.personaBelief.findMany({ orderBy: { confidence: 'desc' } });
       const goals = await db.personaGoal.findMany({ take: 5, orderBy: { priority: 'asc' } });
       const relationship = await db.relationshipState.findFirst();
@@ -1098,10 +840,6 @@ Respond with JSON only:
       }).join('\n\n');
 
       // Format current state
-      const anchorsText = anchors
-        .map(a => `• ${a.trait}: ${(a.value * 100).toFixed(0)}% - ${a.description}`)
-        .join('\n');
-
       const beliefsText = beliefs.length > 0
         ? beliefs.map((b: any) => `[ID:${b.id}] ${b.subject}: "${b.statement}" (confidence: ${(b.confidence * 100).toFixed(0)}%)`).join('\n')
         : 'No beliefs yet';
@@ -1120,7 +858,6 @@ Respond with JSON only:
 
       // Build the deep reflection prompt
       const prompt = DEEP_REFLECTION_PROMPT
-        .replace('{{ANCHORS}}', anchorsText)
         .replace('{{BELIEFS}}', beliefsText)
         .replace('{{GOALS}}', goalsText)
         .replace('{{RELATIONSHIP}}', relationshipText)
@@ -1283,45 +1020,15 @@ Respond with JSON only:
         }
       }
 
-      // Apply tiny anchor nudges (≤0.02)
-      for (const nudge of reflection.anchorNudges || []) {
-        const anchor = anchors.find(a => a.trait === nudge.trait);
-        if (anchor) {
-          const clampedDelta = Math.max(-0.02, Math.min(0.02, nudge.delta));
-          const newValue = Math.max(0, Math.min(1, anchor.value + clampedDelta));
-
-          await db.personalityAnchor.update({
-            where: { id: anchor.id },
-            data: {
-              value: newValue,
-              lastUpdateAt: new Date()
-            }
-          });
-
-          await db.personaEvolutionEvent.create({
-            data: {
-              type: 'anchor',
-              target: nudge.trait,
-              delta: clampedDelta,
-              rationale: nudge.rationale || 'Micro-adjustment from reflection',
-              evidenceIds: JSON.stringify(newMemories.slice(0, 5).map((m: any) => m.id))
-            }
-          });
-
-          console.log(`🔧 Anchor nudge: ${nudge.trait} ${anchor.value.toFixed(2)} → ${newValue.toFixed(2)}`);
-        }
-      }
 
       // Count what was updated
       const newBeliefs = (reflection.beliefUpdates || []).filter((u: any) => u.new).length;
       const updatedBeliefs = (reflection.beliefUpdates || []).filter((u: any) => !u.new).length;
       const newGoals = (reflection.goalUpdates || []).filter((u: any) => u.new).length;
       const updatedGoals = (reflection.goalUpdates || []).filter((u: any) => !u.new).length;
-      const anchorNudges = (reflection.anchorNudges || []).length;
 
       // Reset counter in both memory and database
       this.conversationsSinceReflection = 0;
-      this.anchorCache = null; // Invalidate cache
       
       await db.settings.updateMany({
         data: {
@@ -1331,7 +1038,7 @@ Respond with JSON only:
       });
 
       console.log('[Personality] ✅ Deep reflection complete');
-      console.log(`[Personality] 📊 Summary: ${newBeliefs} new beliefs, ${updatedBeliefs} beliefs updated, ${newGoals} new goals, ${updatedGoals} goals updated, ${anchorNudges} anchors nudged`);
+      console.log(`[Personality] 📊 Summary: ${newBeliefs} new beliefs, ${updatedBeliefs} beliefs updated, ${newGoals} new goals, ${updatedGoals} goals updated`);
       
       // Emit reflection complete event
       if (socket) {
@@ -1341,7 +1048,6 @@ Respond with JSON only:
           updatedBeliefs,
           newGoals,
           updatedGoals,
-          anchorNudges,
           duration: ((Date.now() - startTime) / 1000).toFixed(1),
           timestamp: new Date().toISOString()
         });
@@ -1355,7 +1061,7 @@ Respond with JSON only:
   async getFullSnapshot(): Promise<FullPersonaSnapshot> {
     await this.initialize();
 
-    const { anchors, mood } = await this.getSnapshot();
+    const { mood } = await this.getSnapshot();
     
     const relationship = await db.relationshipState.findFirst();
     if (!relationship) {
@@ -1389,7 +1095,6 @@ Respond with JSON only:
     });
 
     return {
-      anchors,
       mood,
       relationship: {
         ...relationship,
@@ -1420,18 +1125,6 @@ Respond with JSON only:
       });
     }
 
-    // Reset anchors to initial values
-    for (const initial of INITIAL_ANCHORS) {
-      await db.personalityAnchor.updateMany({
-        where: { trait: initial.trait },
-        data: {
-          value: initial.value,
-          evidenceIds: JSON.stringify([]),
-          lastUpdateAt: new Date()
-        }
-      });
-    }
-
     if (wipeMemories) {
       console.log('🗑️  Wiping all memories...');
       await db.memory.deleteMany({});
@@ -1439,7 +1132,6 @@ Respond with JSON only:
     }
 
     // Invalidate cache
-    this.anchorCache = null;
     this.moodCache = null;
   }
 }

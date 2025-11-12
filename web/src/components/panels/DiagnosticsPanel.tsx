@@ -450,11 +450,6 @@ export default function DiagnosticsPanel() {
                                 ↑{event.updatedGoals} GOAL{event.updatedGoals !== 1 ? 'S' : ''}
                             </span>
                           )}
-                          {event.anchorNudges! > 0 && (
-                              <span className="text-[10px] px-2 py-0.5 rounded bg-pink-500/20 text-pink-300 font-semibold monospace">
-                                ✨{event.anchorNudges} ANCHOR{event.anchorNudges !== 1 ? 'S' : ''}
-                            </span>
-                          )}
                         </div>
                       </>
                     )}
@@ -630,57 +625,6 @@ export default function DiagnosticsPanel() {
               </div>
             </div>
 
-            {/* Personality Anchors */}
-            <div className="bg-black/40 border border-cyan-500/30 rounded p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-bold text-cyan-400 monospace flex items-center gap-2">
-                  <Sparkles className="w-4 h-4" />
-                  PERSONALITY ANCHORS
-                </h3>
-                <span className="text-[10px] text-cyan-400 font-semibold monospace">{personality.anchors.length} TRAITS</span>
-              </div>
-              <p className="text-[10px] text-gray-400 mb-4 monospace">Core traits that evolve through experiences</p>
-              
-              <div className="space-y-3 max-h-[400px] overflow-y-auto terminal-scrollbar pr-2">
-                {personality.anchors
-                  .sort((a, b) => b.value - a.value)
-                  .map((anchor) => {
-                    const isNew = [
-                      'Vulnerable Authenticity',
-                      'Playful Chaos', 
-                      'Intellectual Hunger',
-                      'Emotional Attunement',
-                      'Ambition Drive',
-                      'Dark Humor Edge'
-                    ].includes(anchor.trait);
-                    
-                    return (
-                      <div key={anchor.trait}>
-                        <div className="flex justify-between items-center mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-white monospace">{anchor.trait}</span>
-                            {isNew && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-semibold monospace">
-                                NEW
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-xs font-bold text-cyan-400 monospace">{(anchor.value * 100).toFixed(0)}%</span>
-                        </div>
-                        <div className="h-2 bg-gray-700/50 rounded overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-cyan-500 to-pink-500 rounded transition-all duration-500"
-                            style={{ width: `${anchor.value * 100}%` }}
-                          />
-                        </div>
-                        <p className="text-[11px] text-gray-400 mt-1 monospace">
-                          {anchor.description}
-                        </p>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
           </div>
         )}
 

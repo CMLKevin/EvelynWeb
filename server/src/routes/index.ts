@@ -16,7 +16,7 @@ export function setupRoutes(app: Express, io: Server) {
   
   // Health check
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    return res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
   // Get logs
@@ -24,10 +24,10 @@ export function setupRoutes(app: Express, io: Server) {
     try {
       const limit = parseInt(req.query.limit as string) || 200;
       const logs = logger.getRecent(limit);
-      res.json({ logs, total: logs.length });
+      return res.json({ logs, total: logs.length });
     } catch (error) {
       console.error('Get logs error:', error);
-      res.status(500).json({ error: 'Failed to fetch logs' });
+      return res.status(500).json({ error: 'Failed to fetch logs' });
     }
   });
 
@@ -35,10 +35,10 @@ export function setupRoutes(app: Express, io: Server) {
   app.get('/api/temporal/status', async (req, res) => {
     try {
       const status = await temporalEngine.getStatus();
-      res.json(status);
+      return res.json(status);
     } catch (error) {
       console.error('Error getting temporal status:', error);
-      res.status(500).json({ error: 'Failed to get temporal status' });
+      return res.status(500).json({ error: 'Failed to get temporal status' });
     }
   });
 
@@ -59,10 +59,10 @@ export function setupRoutes(app: Express, io: Server) {
         }
       });
       
-      res.json(messages.reverse());
+      return res.json(messages.reverse());
     } catch (error) {
       console.error('Get messages error:', error);
-      res.status(500).json({ error: 'Failed to fetch messages' });
+      return res.status(500).json({ error: 'Failed to fetch messages' });
     }
   });
 
@@ -90,10 +90,10 @@ export function setupRoutes(app: Express, io: Server) {
       });
 
       console.log(`🗑️  Deleted message #${messageId} (${message.role}): ${message.content.slice(0, 50)}...`);
-      res.json({ success: true, deleted });
+      return res.json({ success: true, deleted });
     } catch (error) {
       console.error('Delete message error:', error);
-      res.status(500).json({ error: 'Failed to delete message' });
+      return res.status(500).json({ error: 'Failed to delete message' });
     }
   });
 
@@ -104,10 +104,10 @@ export function setupRoutes(app: Express, io: Server) {
         orderBy: { createdAt: 'desc' },
         take: 20
       });
-      res.json(chapters);
+      return res.json(chapters);
     } catch (error) {
       console.error('Get chapters error:', error);
-      res.status(500).json({ error: 'Failed to fetch chapters' });
+      return res.status(500).json({ error: 'Failed to fetch chapters' });
     }
   });
 
@@ -126,10 +126,10 @@ export function setupRoutes(app: Express, io: Server) {
         take: limit
       });
       
-      res.json(memories);
+      return res.json(memories);
     } catch (error) {
       console.error('Get memories error:', error);
-      res.status(500).json({ error: 'Failed to fetch memories' });
+      return res.status(500).json({ error: 'Failed to fetch memories' });
     }
   });
 
@@ -158,10 +158,10 @@ export function setupRoutes(app: Express, io: Server) {
       });
 
       console.log(`🗑️  Deleted memory #${memoryId}: ${deleted.text.slice(0, 50)}...`);
-      res.json({ success: true, deleted });
+      return res.json({ success: true, deleted });
     } catch (error) {
       console.error('Delete memory error:', error);
-      res.status(500).json({ error: 'Failed to delete memory' });
+      return res.status(500).json({ error: 'Failed to delete memory' });
     }
   });
 
@@ -190,10 +190,10 @@ export function setupRoutes(app: Express, io: Server) {
       });
 
       console.log(`🗑️  Bulk deleted ${result.count} memories`);
-      res.json({ success: true, count: result.count });
+      return res.json({ success: true, count: result.count });
     } catch (error) {
       console.error('Bulk delete memories error:', error);
-      res.status(500).json({ error: 'Failed to delete memories' });
+      return res.status(500).json({ error: 'Failed to delete memories' });
     }
   });
 
@@ -211,10 +211,10 @@ export function setupRoutes(app: Express, io: Server) {
           }
         });
       }
-      res.json(settings);
+      return res.json(settings);
     } catch (error) {
       console.error('Get settings error:', error);
-      res.status(500).json({ error: 'Failed to fetch settings' });
+      return res.status(500).json({ error: 'Failed to fetch settings' });
     }
   });
 
@@ -229,10 +229,10 @@ export function setupRoutes(app: Express, io: Server) {
           data: req.body
         });
       }
-      res.json(settings);
+      return res.json(settings);
     } catch (error) {
       console.error('Update settings error:', error);
-      res.status(500).json({ error: 'Failed to update settings' });
+      return res.status(500).json({ error: 'Failed to update settings' });
     }
   });
 
@@ -241,10 +241,10 @@ export function setupRoutes(app: Express, io: Server) {
     try {
       const { personalityEngine } = await import('../agent/personality.js');
       await personalityEngine.resetPersonality(req.body.wipeMemories || false);
-      res.json({ success: true });
+      return res.json({ success: true });
     } catch (error) {
       console.error('Reset personality error:', error);
-      res.status(500).json({ error: 'Failed to reset personality' });
+      return res.status(500).json({ error: 'Failed to reset personality' });
     }
   });
 
@@ -254,10 +254,10 @@ export function setupRoutes(app: Express, io: Server) {
       const { query, complexity } = req.body;
       const { perplexityClient } = await import('../providers/perplexity.js');
       const result = await perplexityClient.search(query, complexity || 'simple');
-      res.json(result);
+      return res.json(result);
     } catch (error) {
       console.error('Search error:', error);
-      res.status(500).json({ error: 'Failed to perform search' });
+      return res.status(500).json({ error: 'Failed to perform search' });
     }
   });
 
@@ -266,10 +266,10 @@ export function setupRoutes(app: Express, io: Server) {
     try {
       const { personalityEngine } = await import('../agent/personality.js');
       const snapshot = await personalityEngine.getSnapshot();
-      res.json(snapshot);
+      return res.json(snapshot);
     } catch (error) {
       console.error('Get personality error:', error);
-      res.status(500).json({ error: 'Failed to fetch personality' });
+      return res.status(500).json({ error: 'Failed to fetch personality' });
     }
   });
 
@@ -278,10 +278,10 @@ export function setupRoutes(app: Express, io: Server) {
     try {
       const { personalityEngine } = await import('../agent/personality.js');
       const snapshot = await personalityEngine.getFullSnapshot();
-      res.json(snapshot);
+      return res.json(snapshot);
     } catch (error) {
       console.error('Get persona error:', error);
-      res.status(500).json({ error: 'Failed to fetch persona' });
+      return res.status(500).json({ error: 'Failed to fetch persona' });
     }
   });
 
@@ -297,14 +297,14 @@ export function setupRoutes(app: Express, io: Server) {
         take: limit
       });
 
-      res.json(events.map((e: any) => ({
+      return res.json(events.map((e: any) => ({
         ...e,
         evidenceIds: JSON.parse(e.evidenceIds),
         metadata: e.metadata ? JSON.parse(e.metadata) : null
       })));
     } catch (error) {
       console.error('Get evolution events error:', error);
-      res.status(500).json({ error: 'Failed to fetch evolution events' });
+      return res.status(500).json({ error: 'Failed to fetch evolution events' });
     }
   });
 
@@ -416,10 +416,10 @@ export function setupRoutes(app: Express, io: Server) {
         metadata: activity.metadata ? JSON.parse(activity.metadata) : null
       }));
       
-      res.json(activitiesWithParsedMetadata);
+      return res.json(activitiesWithParsedMetadata);
     } catch (error) {
       console.error('Get activities error:', error);
-      res.status(500).json({ error: 'Failed to fetch activities' });
+      return res.status(500).json({ error: 'Failed to fetch activities' });
     }
   });
 
@@ -447,57 +447,12 @@ export function setupRoutes(app: Express, io: Server) {
         timestamp: sr.createdAt.toISOString()
       }));
       
-      res.json(formattedResults.reverse());
+      return res.json(formattedResults.reverse());
     } catch (error) {
       console.error('Get search results error:', error);
-      res.status(500).json({ error: 'Failed to fetch search results' });
+      return res.status(500).json({ error: 'Failed to fetch search results' });
     }
   });
 
-  // Get personality anchor update status
-  app.get('/api/personality/anchor-status', async (req, res) => {
-    try {
-      const { personalityEngine } = await import('../agent/personality.js');
-      const status = await personalityEngine.getAnchorUpdateStatus();
-      res.json(status);
-    } catch (error) {
-      console.error('Get anchor status error:', error);
-      res.status(500).json({ error: 'Failed to fetch anchor update status' });
-    }
-  });
-
-  // Manually trigger personality anchor update (for testing)
-  app.post('/api/personality/update-anchors', async (req, res) => {
-    try {
-      const { personalityEngine } = await import('../agent/personality.js');
-      const updated = await personalityEngine.checkAndUpdateAnchors();
-      res.json({ 
-        success: true, 
-        updated,
-        message: updated ? 'Anchors updated' : 'No update needed'
-      });
-    } catch (error) {
-      console.error('Manual anchor update error:', error);
-      res.status(500).json({ error: 'Failed to update anchors' });
-    }
-  });
-
-  // Sync personality anchors (adds missing anchors from code)
-  app.post('/api/personality/sync-anchors', async (req, res) => {
-    try {
-      const { personalityEngine } = await import('../agent/personality.js');
-      await personalityEngine.initialize();
-      const snapshot = await personalityEngine.getSnapshot();
-      res.json({ 
-        success: true, 
-        anchorCount: snapshot.anchors.length,
-        anchors: snapshot.anchors.map(a => ({ trait: a.trait, value: a.value })),
-        message: `Synced ${snapshot.anchors.length} personality anchors`
-      });
-    } catch (error) {
-      console.error('Anchor sync error:', error);
-      res.status(500).json({ error: 'Failed to sync anchors' });
-    }
-  });
 }
 

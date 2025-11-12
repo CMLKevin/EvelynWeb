@@ -69,6 +69,21 @@ const BASETEN_FP4_PROVIDER: ProviderPreferences = {
   quantizations: ['fp4']
 };
 
+// DeepInfra FP4 provider configuration
+const DEEPINFRA_FP4_PROVIDER: ProviderPreferences = {
+  order: ['DeepInfra'],
+  require_parameters: true,
+  data_collection: 'deny',
+  quantizations: ['fp4']
+};
+
+// Moonshot AI provider configuration
+const MOONSHOT_PROVIDER: ProviderPreferences = {
+  order: ['moonshotai'],
+  require_parameters: true,
+  data_collection: 'deny'
+};
+
 class OpenRouterClient {
   private baseUrl: string;
   private apiKey: string;
@@ -180,19 +195,40 @@ class OpenRouterClient {
       requestBody.provider = provider;
     }
 
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(requestBody)
-    });
+    // Add timeout to prevent hanging requests (60 seconds for completion)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`OpenRouter error: ${response.status} ${error}`);
+    try {
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`OpenRouter error: ${response.status} ${error}`);
+      }
+
+      const data = await response.json() as CompletionResponse;
+      return data.choices[0].message.content;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      // Handle abort/timeout errors
+      if (error instanceof Error) {
+        if (error.name === 'AbortError' || error.message.includes('terminated')) {
+          throw new Error(`OpenRouter request timeout: The request took too long or the connection was closed. This may be due to network issues or the API being temporarily unavailable.`);
+        }
+        // Re-throw other errors as-is
+        throw error;
+      }
+      throw error;
     }
-
-    const data = await response.json() as CompletionResponse;
-    return data.choices[0].message.content;
   }
 
   async simpleThought(prompt: string): Promise<string> {
@@ -283,8 +319,8 @@ class OpenRouterClient {
 
 export const openRouterClient = new OpenRouterClient();
 
-// Export Baseten FP4 provider for external use
-export { BASETEN_FP4_PROVIDER };
+// Export provider configurations for external use
+export { BASETEN_FP4_PROVIDER, DEEPINFRA_FP4_PROVIDER, MOONSHOT_PROVIDER };
 
 // Export types for external use
 export type { ProviderPreferences, Message, VisionMessage };

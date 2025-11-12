@@ -260,7 +260,14 @@ Write the summary now:`;
       console.log(`[Perplexity] Generated summary: ${summary.length} characters (~${Math.round(summary.split(/\s+/).length)} words)`);
       return summary;
     } catch (error) {
-      console.error('[Perplexity] Summary generation failed:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[Perplexity] Summary generation failed:', errorMessage);
+      
+      // Check if it's a timeout/connection error
+      if (errorMessage.includes('timeout') || errorMessage.includes('terminated') || errorMessage.includes('closed')) {
+        console.warn('[Perplexity] Summary generation timed out or connection closed. Using fallback summary from search results.');
+      }
+      
       // Fallback to truncated answer if summary generation fails
       return searchResult.answer.slice(0, 2000) + (searchResult.answer.length > 2000 ? '...' : '');
     }
